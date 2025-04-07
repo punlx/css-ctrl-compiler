@@ -25,44 +25,84 @@ function generateGeneric(sourceCode: string): string {
   // 3) ฟังก์ชัน parse $xxx[...] (รวม pseudo)
   // -----------------------------------------------------------------------------
   function parseStylesIntoSet(content: string, targetSet: Set<string>) {
+    // regex เดิมจับ pseudo function: hover(...), focus(...), ฯลฯ
     const pseudoFnRegex =
       /\b(hover|focus|active|focus-within|focus-visible|target|disabled|enabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid|before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|screen|container)\s*\(([^)]*)\)/g;
+
     let fnMatch: RegExpExecArray | null;
+
+    // ------------------------------------------------------------------
+    // 1) วนหา pseudo function แต่ละตัวแล้ว parse ข้างใน (...)
+    // ------------------------------------------------------------------
     while ((fnMatch = pseudoFnRegex.exec(content)) !== null) {
       const pseudoFn = fnMatch[1];
       const inside = fnMatch[2];
-      if (pseudoFn === 'screen' || pseudoFn === 'container') {
-        continue;
-      }
-      const styleMatches = [...inside.matchAll(/(\$[\w-]+)\[/g)]
+
+      // *** จุดที่ต้องแก้: ให้จับทั้ง `$xxx[...]` และ `--&xxx[...]` ***
+      const styleMatches = [...inside.matchAll(/(\$[\w-]+|--&[\w-]+)\[/g)]
         .filter((m) => {
           const idx = m.index || 0;
-          if (idx >= 2 && inside.slice(idx - 2, idx) === '--') {
+          const matchText = m[1];
+
+          // ถ้าเป็น `$xxx` แต่ข้างหน้ามี `--` ให้ skip (ตาม logic เดิม)
+          if (matchText.startsWith('$') && idx >= 2 && inside.slice(idx - 2, idx) === '--') {
             return false;
           }
+
           return true;
         })
-        .map((m) => m[1]);
+        .map((m) => m[1]); // เอาเฉพาะ capture group
+
+      // จากนั้น แยกว่าเป็น `$xxx` หรือ `--&xxx`
       for (const styleName of styleMatches) {
-        targetSet.add(`${styleName}-${pseudoFn}`);
+        if (styleName.startsWith('$')) {
+          // เคสเดิม: ต่อ pseudoFn เข้าไป
+          targetSet.add(`${styleName}-${pseudoFn}`);
+        } else if (styleName.startsWith('--&')) {
+          // เคสใหม่: ให้ generate เป็น &xxx เท่านั้น ไม่มี pseudo suffix
+          const localName = styleName.slice('--&'.length); // ตัด '--&' ออก
+          targetSet.add(`&${localName}`);
+        }
       }
     }
 
+    // ------------------------------------------------------------------
+    // 2) ตัด pseudo function ออก (เพื่อ parse "direct usage" อีกรอบ)
+    // ------------------------------------------------------------------
     const pseudoFnRegexForRemove =
       /\b(?:hover|focus|active|focus-within|focus-visible|target|disabled|enabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid|before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|screen|container)\s*\(([^)]*)\)/g;
+
     const contentWithoutFn = content.replace(pseudoFnRegexForRemove, '');
 
-    const directMatches = [...contentWithoutFn.matchAll(/(\$[\w-]+)\[/g)]
+    // ------------------------------------------------------------------
+    // 3) parse "direct usage" (ไม่อยู่ใน pseudo function)
+    // ------------------------------------------------------------------
+    const directMatches = [...contentWithoutFn.matchAll(/(\$[\w-]+|--&[\w-]+)\[/g)]
       .filter((m) => {
         const idx = m.index || 0;
-        if (idx >= 2 && contentWithoutFn.slice(idx - 2, idx) === '--') {
+        const matchText = m[1];
+
+        // logic เดิม: ถ้าเป็น `$xxx[...]` แต่เกิดมาจาก `--$xxx[...]` ก็ skip
+        if (
+          matchText.startsWith('$') &&
+          idx >= 2 &&
+          contentWithoutFn.slice(idx - 2, idx) === '--'
+        ) {
           return false;
         }
         return true;
       })
       .map((m) => m[1]);
+
     for (const styleName of directMatches) {
-      targetSet.add(styleName);
+      if (styleName.startsWith('$')) {
+        // เป็น $xxx เฉย ๆ
+        targetSet.add(styleName);
+      } else if (styleName.startsWith('--&')) {
+        // ตัด '--&' ออก แล้วเก็บเป็น &xxx
+        const localName = styleName.slice('--&'.length);
+        targetSet.add(`&${localName}`);
+      }
     }
   }
 
