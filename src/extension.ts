@@ -210,7 +210,10 @@ export async function activate(context: vscode.ExtensionContext) {
   // --------------------------------------------------------------------------------
   // เมื่อ save ไฟล์ .ctrl.ts => validate ใหม่ ถ้าไม่ error => generate
   // --------------------------------------------------------------------------------
-  const saveDisposable = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
+  // แทนที่ saveDisposable เดิมด้วย onWillSaveTextDocument
+  const willSaveDisposable = vscode.workspace.onWillSaveTextDocument(async (e) => {
+    const savedDoc = e.document;
+
     if (savedDoc.fileName.endsWith('.ctrl.ts')) {
       // validate
       validateCssCtrlDoc(savedDoc, cssCtrlDiagnosticCollection);
@@ -234,7 +237,7 @@ export async function activate(context: vscode.ExtensionContext) {
       // vscode.window.showInformationMessage('Created .ctrl.css and Generated Generic done!');
     }
   });
-  context.subscriptions.push(saveDisposable);
+  context.subscriptions.push(willSaveDisposable);
 
   // --------------------------------------------------------------------------------
   // Command สร้างไฟล์ .ctrl.css และ generate
@@ -269,19 +272,18 @@ export async function activate(context: vscode.ExtensionContext) {
   // --------------------------------------------------------------------------------
   // (NEW) เมื่อ save ไฟล์ ctrl.theme.ts => generate ctrl.theme.css
   // --------------------------------------------------------------------------------
-  const themeSaveDisposable = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
+  const themeWillSaveDisposable = vscode.workspace.onWillSaveTextDocument(async (e) => {
+    const savedDoc = e.document;
+
     if (savedDoc.fileName.endsWith('ctrl.theme.ts')) {
       try {
-        // (คุณจะ validate อะไรก่อนก็ได้)
         await createCssCtrlThemeCssFile(savedDoc);
-        // vscode.window.showInformationMessage('ctrl.theme.css generated successfully!');
       } catch (error) {
-        // handle error
         console.error('Error generating ctrl.theme.css =>', error);
       }
     }
   });
-  context.subscriptions.push(themeSaveDisposable);
+  context.subscriptions.push(themeWillSaveDisposable);
 }
 
 export function deactivate() {
