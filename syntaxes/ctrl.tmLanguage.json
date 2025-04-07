@@ -1,0 +1,142 @@
+{
+  "name": "CSS-CTRL Hanlder TS template",
+  "scopeName": "source.css.ctrl",
+  "injectionSelector": "L:source.ts",
+  "patterns": [
+    {
+      "name": "meta.styled.block",
+      "begin": "css\\s*<\\{[^}]+}>`",
+      "end": "`",
+      "patterns": [
+        {
+          "name": "meta.bracket.content.css",
+          "begin": "(?<=(\\[)|(\\[\\$[\\w-]+)\\s*)",
+          "end": "\\]",
+          "patterns": [
+            {
+              "name": "keyword.other.unit.px.css",
+              "match": "(?<![\\w-])\\d+(?:\\.\\d+)?(?:%|px|s|cm|mm|in|pt|pc|em|rem|vw|vh|vmin|vmax|ex|ch|lh|rlh|fr)(?![\\w-])"
+            },
+            {
+              "name": "support.type.property-name.css",
+              "match": "(--[\\w\\d-]+)"
+            },
+            {
+              "name": "variable.other.constant.object.ts",
+              "match": "--\\&([\\w-]*)"
+            },
+            {
+              "name": "support.constant.property-value.css",
+              "match": "\\b(?!\\d+(?:\\.\\d+)?(?:%|px|s|cm|mm|in|pt|pc|em|rem|vw|vh|vmin|vmax|ex|ch|lh|rlh|fr)\\b)[\\w-]+\\b"
+            }
+          ]
+        },
+        {
+          "name": "entity.other.attribute-name.class.css",
+          "match": "\\.[\\w-]*"
+        },
+        {
+          "name": "support.type.property-name.css",
+          "match": "(--[\\w\\d-]+)"
+        },
+        {
+          "name": "support.type.property-name.css",
+          "match": "(?<=(@bind|@scope|@const)\\s)([\\w-]+)"
+        },
+        {
+          "name": "support.type.property-name.css",
+          "match": "(?<=@use\\s)([\\w-]+(?:\\s+[\\w-]+)*)"
+        },
+        {
+          "name": "entity.other.attribute-name.class.css",
+          "match": "(?<=@query\\s)(.*?)(?=\\s*\\{)"
+        },
+        {
+          "name": "variable.other.constant.object.ts",
+          "match": "--\\&([\\w-]*)"
+        },
+        {
+          "name": "support.type.property-name.css",
+          "match": "([\\w-]+)\\s*\\["
+        },
+        {
+          "name": "support.function.misc.css",
+          "match": "\\$(([\\w-]+)\\s*\\[)"
+        },
+        {
+          "name": "entity.other.attribute-name.class.css",
+          "match": "(before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|hover|focus|active|focus-within|focus-visible|target|disabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid)"
+        },
+        {
+          "name": "keyword.control.at-rule.css",
+          "match": "(@scope|@bind|@const|@use|@query)"
+        },
+        {
+          "name": "keyword.control.at-rule.media.css",
+          "match": "(screen|container)"
+        }
+      ]
+    },
+    {
+      "name": "ctrl.template",
+      "begin": "(css)(\\s*<[^>]*>)?(\\s*`)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.ctrl.ts"
+        },
+        "2": {
+          "name": "meta.typeparameters.ctrl.ts"
+        },
+        "3": {
+          "name": "punctuation.definition.template-expression.begin.ts"
+        }
+      },
+      "end": "`",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.end.ts"
+        }
+      },
+      "patterns": [
+        {
+          "name": "ctrl.interpolation",
+          "begin": "\\$\\{",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.interpolation.begin.ts"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.interpolation.end.ts"
+            }
+          },
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        {
+          "include": "source.css"
+        }
+      ]
+    },
+    {
+      "name": "meta.styled.theme",
+      "begin": "(theme.palette\\(\\[)",
+      "end": "\\]\\);",
+      "patterns": [
+        {
+          "name": "entity.other.attribute-name.class.css",
+          "match": "#[0-9A-Fa-f]{6}"
+        },
+        {
+          "name": "support.constant.property-value.css",
+          "match": "[\\w-]+"
+        }
+      ]
+    }
+  ]
+}

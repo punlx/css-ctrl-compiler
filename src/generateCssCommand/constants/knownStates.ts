@@ -1,0 +1,27 @@
+// src/generateCssCommand/constants/knownStates.ts
+
+export const knownStates = [
+  'hover',
+  'focus',
+  'active',
+  'focus-within',
+  'focus-visible',
+  'target',
+  'disabled',
+  'enabled',
+  'read-only',
+  'read-write',
+  'required',
+  'optional',
+  'checked',
+  'indeterminate',
+  'valid',
+  'invalid',
+  'in-range',
+  'out-of-range',
+  'placeholder-shown',
+  'default',
+  'link',
+  'visited',
+  'user-invalid',
+];

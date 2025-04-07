@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch CSS-CTRL Compiler Extension",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/out/extension.js",
+      "outFiles": ["${workspaceFolder}/out/**/*.js"],
+      "preLaunchTask": "npm: compile", // เรียก Task compile ก่อน
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "${execPath}",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "sourceMaps": true
+    }
+  ]
+}

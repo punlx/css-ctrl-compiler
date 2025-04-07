@@ -1,0 +1,59 @@
+{
+  "name": "css-ctrl-compiler",
+  "displayName": "CSS-CTRL Compiler",
+  "description": "VSCode Intellisense (Autocompletion) for *.ctrl.ts files in CSS-CTRL",
+  "version": "0.0.5",
+  "publisher": "punlx",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ctrl.createCtrlCssAndGenerate",
+        "title": "CSS-CTRL: Create .ctrl.css And Generate Type"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "CSS-CTRL Compiler Settings",
+      "properties": {
+        "CssCtrlCompiler.themeFile": {
+          "type": "string",
+          "default": "ctrl.theme.ts",
+          "description": "Relative path to your ctrl.theme.ts"
+        }
+      }
+    },
+    "grammars": [
+      {
+        "scopeName": "source.css.ctrl",
+        "path": "./syntaxes/ctrl.tmLanguage.json",
+        "injectTo": [
+          "source.ts",
+          "source.tsx"
+        ]
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/punlx/css-ctrl-compiler"
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "build": "rm -rf out && tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.2",
+    "vsce": "^2.x"
+  },
+  "icon": "icon.png"
+}
