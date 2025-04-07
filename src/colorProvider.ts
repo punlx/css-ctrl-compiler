@@ -1,4 +1,4 @@
-// colorProvider.ts
+// src/colorProvider.ts
 import * as vscode from 'vscode';
 import { colorAbbrSet } from './constants';
 

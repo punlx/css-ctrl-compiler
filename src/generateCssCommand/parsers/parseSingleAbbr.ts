@@ -1,3 +1,5 @@
+// src/generateCssCommand/parsers/parseSingleAbbr.ts
+
 import { knownStates } from '../constants/knownStates';
 import { supportedPseudos } from '../constants/supportedPseudos';
 import { IStyleDefinition } from '../types';
@@ -34,7 +36,9 @@ export function parseSingleAbbr(
 
   if (isQueryBlock) {
     if (/^--&[\w-]+\[/.test(trimmed)) {
-      throw new Error(`[CSS-CTRL-ERR] Local var not allowed inside @query block. Found: "${trimmed}"`);
+      throw new Error(
+        `[CSS-CTRL-ERR] Local var not allowed inside @query block. Found: "${trimmed}"`
+      );
     }
     if (/^\$[\w-]+\[/.test(trimmed)) {
       throw new Error(

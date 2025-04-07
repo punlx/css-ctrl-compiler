@@ -1,3 +1,5 @@
+// src/generateCssCommand/utils/handleBindDirectives.ts
+
 import { IParsedDirective, IStyleDefinition } from '../types';
 
 /**

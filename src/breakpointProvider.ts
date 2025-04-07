@@ -1,4 +1,4 @@
-// breakpointProvider.ts
+// src/breakpointProvider.ts
 import * as vscode from 'vscode';
 
 /**

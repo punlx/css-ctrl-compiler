@@ -1,4 +1,5 @@
-// src/sharedScopeUtils.ts
+// src/generateCssCommand/utils/sharedScopeUtils.ts
+
 // หรือจะวางไว้ในที่ๆ สะดวก ทั้ง extension และ runtime import ได้
 
 /************************************************************

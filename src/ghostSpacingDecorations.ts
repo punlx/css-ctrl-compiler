@@ -1,4 +1,5 @@
-// ghostSpacingDecorations.ts
+// src/ghostSpacingDecorations.ts
+
 import * as vscode from 'vscode';
 
 /**

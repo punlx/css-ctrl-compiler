@@ -1,3 +1,5 @@
+// src/extension.ts
+
 import * as vscode from 'vscode';
 import { createScopeSuggestionProvider } from './scopeSuggestionProvider';
 
@@ -67,7 +69,7 @@ export async function activate(context: vscode.ExtensionContext) {
   await initPaletteMap();
   let paletteColors: Record<string, Record<string, string>> = {};
   let screenDict: Record<string, string> = {};
-  let fontDict: Record<string, string> = {};
+  let typographyDict: Record<string, string> = {};
   let keyframeDict: Record<string, string> = {};
   let spacingDict: Record<string, string> = {};
   let defineMap: Record<string, string[]> = {};
@@ -86,7 +88,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const themeFilePath = foundUris[0].fsPath;
         paletteColors = parseThemePaletteFull(themeFilePath);
         screenDict = parseThemeBreakpointDict(themeFilePath);
-        fontDict = parseThemeTypographyDict(themeFilePath);
+        typographyDict = parseThemeTypographyDict(themeFilePath);
         keyframeDict = parseThemeKeyframeDict(themeFilePath);
         spacingDict = parseThemeVariableDict(themeFilePath);
         defineMap = parseThemeDefine(themeFilePath);
@@ -104,7 +106,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const reversePropProvider = createReversePropertyProvider();
   const colorProvider = createColorProvider(paletteColors);
   const breakpointProvider = createBreakpointProvider(screenDict);
-  const fontProvider = createFontProvider(fontDict);
+  const typographyProvider = createFontProvider(typographyDict);
   const keyframeProvider = createKeyframeProvider(keyframeDict);
   const spacingProvider = createSpacingProvider(spacingDict);
   const directiveProvider = createDirectiveProvider();
@@ -127,7 +129,7 @@ export async function activate(context: vscode.ExtensionContext) {
     reversePropProvider,
     colorProvider,
     breakpointProvider,
-    fontProvider,
+    typographyProvider,
     keyframeProvider,
     spacingProvider,
     directiveProvider,
@@ -176,7 +178,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // (NEW) เชื่อมข้อมูล screenDict, fontDict, defineRawMap => globalDefineMap
   // --------------------------------------------------------------------------------
   globalBreakpointDict = screenDict; // สำหรับ screen(...) / container(...)
-  globalTypographyDict = fontDict; // สำหรับ ty[...]
+  globalTypographyDict = typographyDict; // สำหรับ ty[...]
   // แปลง defineRawMap => globalDefineMap
   for (const mainKey in defineRawMap) {
     globalDefineMap[mainKey] = {};

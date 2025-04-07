@@ -1,4 +1,5 @@
-// ghostImportantDecorations.ts
+// src/ghostImportantDecorations.ts
+
 import * as vscode from 'vscode';
 
 /**

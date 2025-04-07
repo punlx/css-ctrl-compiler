@@ -1,3 +1,5 @@
+// src/generateCssCommand/parsers/parsePseudoElementStyle.ts
+
 import { abbrMap } from '../../constants';
 import { globalTypographyDict } from '../../extension';
 import { convertCSSVariable } from '../helpers/convertCSSVariable';
@@ -22,7 +24,9 @@ export function parsePseudoElementStyle(
   for (const p of propsInPseudo) {
     const { line: tokenNoBang, isImportant } = detectImportantSuffix(p);
     if (isConstContext && isImportant) {
-      throw new Error(`[CSS-CTRL-ERR] !important is not allowed in @const block. Found: "${abbrLine}"`);
+      throw new Error(
+        `[CSS-CTRL-ERR] !important is not allowed in @const block. Found: "${abbrLine}"`
+      );
     }
     const [abbr, val] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
@@ -111,7 +115,9 @@ export function parsePseudoElementStyle(
 
       const cProp = abbrMap[realAbbr as keyof typeof abbrMap];
       if (!cProp) {
-        throw new Error(`[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap for pseudo-element ${pseudoName}.`);
+        throw new Error(
+          `[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap for pseudo-element ${pseudoName}.`
+        );
       }
 
       const finalVal = convertCSSVariable(val2);

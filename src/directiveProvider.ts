@@ -1,4 +1,5 @@
-// directiveProvider.ts
+// src/directiveProvider.ts
+
 import * as vscode from 'vscode';
 
 export function createDirectiveProvider() {

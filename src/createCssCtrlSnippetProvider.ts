@@ -1,4 +1,4 @@
-// createCssCtrlSnippetProvider.ts
+// src/createCssCtrlSnippetProvider.ts
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { indentUnit } from './generateGenericProvider';

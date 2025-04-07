@@ -1,4 +1,5 @@
-// themePaletteColorProvider.ts
+// src/themePaletteColorProvider.ts
+
 import * as vscode from 'vscode';
 
 /**

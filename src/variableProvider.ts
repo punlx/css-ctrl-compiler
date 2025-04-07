@@ -1,4 +1,5 @@
-// spacingProvider.ts
+// src/spacingProvider.ts
+
 import * as vscode from 'vscode';
 import { variableAbbrSet } from './constants';
 

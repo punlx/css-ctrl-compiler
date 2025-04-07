@@ -1,3 +1,5 @@
+// src/generateCssCommand/parsers/parseScreenStyle.ts
+
 import { abbrMap } from '../../constants';
 import { globalBreakpointDict, globalTypographyDict } from '../../extension';
 import { convertCSSVariable } from '../helpers/convertCSSVariable';
@@ -34,7 +36,9 @@ export function parseScreenStyle(
   const bracketOpen = screenPart.indexOf('[');
   const bracketClose = screenPart.indexOf(']');
   if (bracketOpen === -1 || bracketClose === -1) {
-    throw new Error(`[CSS-CTRL-ERR] "screen" must contain something like min-w[600px]. Got ${screenPart}`);
+    throw new Error(
+      `[CSS-CTRL-ERR] "screen" must contain something like min-w[600px]. Got ${screenPart}`
+    );
   }
 
   const screenAbbr = screenPart.slice(0, bracketOpen).trim();
@@ -51,7 +55,9 @@ export function parseScreenStyle(
   for (const p of styleList) {
     const { line: tokenNoBang, isImportant } = detectImportantSuffix(p);
     if (isConstContext && isImportant) {
-      throw new Error(`[CSS-CTRL-ERR] !important is not allowed in @const block. Found: "${abbrLine}"`);
+      throw new Error(
+        `[CSS-CTRL-ERR] !important is not allowed in @const block. Found: "${abbrLine}"`
+      );
     }
 
     const [abbr, val] = separateStyleAndProperties(tokenNoBang);
@@ -79,7 +85,9 @@ export function parseScreenStyle(
       if (!abbr2) continue;
 
       if (abbr2.startsWith('--&') && isImportant) {
-        throw new Error(`[CSS-CTRL-ERR] !important is not allowed with local var (${abbr2}) in screen.`);
+        throw new Error(
+          `[CSS-CTRL-ERR] !important is not allowed with local var (${abbr2}) in screen.`
+        );
       }
 
       if (val2.includes('--&')) {
@@ -113,7 +121,9 @@ export function parseScreenStyle(
 
           const cProp = abbrMap[subAbbr as keyof typeof abbrMap];
           if (!cProp) {
-            throw new Error(`[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap (screen) for ty[${typKey}].`);
+            throw new Error(
+              `[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap (screen) for ty[${typKey}].`
+            );
           }
           const finalVal = convertCSSVariable(subVal);
           screenProps[cProp] = finalVal + (tkImp ? ' !important' : '');

@@ -1,4 +1,5 @@
-// defineProvider.ts
+// src/defineProvider.ts
+
 import * as vscode from 'vscode';
 
 /**

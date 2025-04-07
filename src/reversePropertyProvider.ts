@@ -1,4 +1,5 @@
-// reversePropertyProvider.ts
+// src/reversePropertyProvider.ts
+
 import * as vscode from 'vscode';
 import { abbrMap } from './constants';
 

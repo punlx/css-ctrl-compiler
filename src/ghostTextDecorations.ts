@@ -1,4 +1,5 @@
-// ghostTextDecorations.ts
+// src/ghostTextDecorations.ts
+
 import * as vscode from 'vscode';
 import { abbrMap } from './constants';
 

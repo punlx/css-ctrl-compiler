@@ -1,3 +1,5 @@
+// src/generateCssCommand/builders/buildCssText.ts
+
 import { IStyleDefinition } from '../types';
 import { buildQueryCssText } from './buildQueryCssText';
 

@@ -1,3 +1,5 @@
+// src/generateCssCommand/parsers/parseStateStyle.ts
+
 import { abbrMap } from '../../constants';
 import { globalTypographyDict } from '../../extension';
 import { convertCSSVariable } from '../helpers/convertCSSVariable';
@@ -20,7 +22,9 @@ export function parseStateStyle(
   for (const p of propsInState) {
     const { line: tokenNoBang, isImportant } = detectImportantSuffix(p);
     if (isConstContext && isImportant) {
-      throw new Error(`[CSS-CTRL-ERR] !important is not allowed in @const block. Found: "${abbrLine}"`);
+      throw new Error(
+        `[CSS-CTRL-ERR] !important is not allowed in @const block. Found: "${abbrLine}"`
+      );
     }
 
     const [abbr, val] = separateStyleAndProperties(tokenNoBang);

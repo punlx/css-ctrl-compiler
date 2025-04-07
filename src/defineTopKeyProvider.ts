@@ -1,4 +1,5 @@
-// defineTopKeyProvider.ts
+// src/defineTopKeyProvider.ts
+
 import * as vscode from 'vscode';
 
 /**

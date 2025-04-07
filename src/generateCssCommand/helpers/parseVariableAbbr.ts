@@ -1,3 +1,5 @@
+// src/generateCssCommand/helpers/parseVariableAbbr.ts
+
 export function parseVariableAbbr(abbr: string): { baseVarName: string; suffix: string } {
   if (!abbr.startsWith('$')) {
     throw new Error(`[CSS-CTRL-ERR] Only $variable is supported. Got "${abbr}"`);

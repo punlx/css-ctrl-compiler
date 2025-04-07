@@ -1,3 +1,5 @@
+// src/generateCssCommand/helpers/parseClassBlocksWithBraceCounting.ts
+
 import { IClassBlock } from '../types';
 
 export function parseClassBlocksWithBraceCounting(text: string): IClassBlock[] {

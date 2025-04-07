@@ -1,4 +1,5 @@
-// cssTsColorProvider.ts
+// src/cssTsColorProvider.ts
+
 import * as vscode from 'vscode';
 import { parseThemePaletteFull } from './parseTheme';
 import { namedColorHex } from './constants';

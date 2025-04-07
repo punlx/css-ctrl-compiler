@@ -1,3 +1,5 @@
+// src/scopeSuggestionProvider.ts
+
 import * as vscode from 'vscode';
 
 export function createScopeSuggestionProvider(): vscode.Disposable {

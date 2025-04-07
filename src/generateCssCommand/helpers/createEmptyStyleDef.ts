@@ -1,3 +1,5 @@
+// src/generateCssCommand/helpers/createEmptyStyleDef.ts
+
 import { IStyleDefinition } from '../types';
 
 export function createEmptyStyleDef(): IStyleDefinition {

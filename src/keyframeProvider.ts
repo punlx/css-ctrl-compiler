@@ -1,4 +1,5 @@
-// keyframeProvider.ts
+// src/keyframeProvider.ts
+
 import * as vscode from 'vscode';
 import { abbrMap } from './constants';
 

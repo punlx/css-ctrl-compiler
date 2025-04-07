@@ -1,3 +1,5 @@
+// src/generateCssCommand/parsers/parseBaseStyle.ts
+
 import { abbrMap } from '../../constants';
 import { globalTypographyDict } from '../../extension';
 import { globalDefineMap } from '../createCssCtrlCssCommand';

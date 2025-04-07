@@ -1,4 +1,5 @@
-// modeSuggestionProvider.ts
+// src/modeSuggestionProvider.ts
+
 import * as vscode from 'vscode';
 
 /**

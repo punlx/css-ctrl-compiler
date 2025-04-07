@@ -1,10 +1,11 @@
+// src/generateCssCommand/parsers/parseContainerStyle.ts
+
 import { abbrMap } from '../../constants';
 import { globalBreakpointDict, globalTypographyDict } from '../../extension';
 import { convertCSSVariable } from '../helpers/convertCSSVariable';
 import { detectImportantSuffix } from '../helpers/detectImportantSuffix';
 import { separateStyleAndProperties } from '../helpers/separateStyleAndProperties';
 import { IStyleDefinition } from '../types';
-import { parseSingleAbbr } from './parseSingleAbbr'; // ใช้เรียกซ้ำ ถ้าต้องการ
 
 export function parseContainerStyle(
   abbrLine: string,
@@ -35,7 +36,9 @@ export function parseContainerStyle(
   const bracketOpen = containerPart.indexOf('[');
   const bracketClose = containerPart.indexOf(']');
   if (bracketOpen === -1 || bracketClose === -1) {
-    throw new Error(`[CSS-CTRL-ERR] "container" must contain e.g. min-w[600px]. Got ${containerPart}`);
+    throw new Error(
+      `[CSS-CTRL-ERR] "container" must contain e.g. min-w[600px]. Got ${containerPart}`
+    );
   }
 
   const cAbbr = containerPart.slice(0, bracketOpen).trim();
@@ -53,7 +56,9 @@ export function parseContainerStyle(
   for (const p of propsList) {
     const { line: tokenNoBang, isImportant } = detectImportantSuffix(p);
     if (isConstContext && isImportant) {
-      throw new Error(`[CSS-CTRL-ERR] !important is not allowed in @const block. Found: "${abbrLine}"`);
+      throw new Error(
+        `[CSS-CTRL-ERR] !important is not allowed in @const block. Found: "${abbrLine}"`
+      );
     }
 
     const [abbr, val] = separateStyleAndProperties(tokenNoBang);
@@ -104,7 +109,9 @@ export function parseContainerStyle(
 
           const cProp2 = abbrMap[subAbbr as keyof typeof abbrMap];
           if (!cProp2) {
-            throw new Error(`[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap (container). (ty[${typKey}])`);
+            throw new Error(
+              `[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap (container). (ty[${typKey}])`
+            );
           }
           let finalVal = convertCSSVariable(subVal);
           containerProps[cProp2] = finalVal + (tkImp ? ' !important' : '');

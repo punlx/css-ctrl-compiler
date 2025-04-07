@@ -1,4 +1,4 @@
-// generateGenericProvider.ts
+// src/generateGenericProvider.ts
 
 import * as vscode from 'vscode';
 export const indentUnit = '  ';

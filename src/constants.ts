@@ -1,4 +1,4 @@
-// constants.ts
+// src/constants.ts
 export const cssValues: Record<string, string[]> = {
   all: ['initial', 'inherit', 'unset', 'revert', 'revert-layer'],
   /********************************************

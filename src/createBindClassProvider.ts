@@ -1,4 +1,4 @@
-// createBindClassProvider.ts
+// src/createBindClassProvider.ts
 import * as vscode from 'vscode';
 
 /**

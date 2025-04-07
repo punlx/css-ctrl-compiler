@@ -1,3 +1,5 @@
+// src/parseTheme.ts
+
 import * as fs from 'fs';
 
 /**

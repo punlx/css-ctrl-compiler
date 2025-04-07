@@ -1,4 +1,5 @@
-// localVarProvider.ts
+// src/localVarProvider.ts
+
 import * as vscode from 'vscode';
 
 /**

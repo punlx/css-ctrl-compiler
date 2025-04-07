@@ -1,3 +1,5 @@
+// src/generateCssCommand/utils/extractQueryBlocks.ts
+
 const queryRegex = /@query\s+([^{]+)\s*\{([\s\S]*?)\}/g;
 
 export function extractQueryBlocks(classBody: string): {
