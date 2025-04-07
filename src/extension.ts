@@ -211,30 +211,35 @@ export async function activate(context: vscode.ExtensionContext) {
   // เมื่อ save ไฟล์ .ctrl.ts => validate ใหม่ ถ้าไม่ error => generate
   // --------------------------------------------------------------------------------
   // แทนที่ saveDisposable เดิมด้วย onWillSaveTextDocument
-  const willSaveDisposable = vscode.workspace.onWillSaveTextDocument(async (e) => {
+  const willSaveDisposable = vscode.workspace.onWillSaveTextDocument((e) => {
     const savedDoc = e.document;
+    const activeEditor = vscode.window.activeTextEditor;
+
+    if (!activeEditor || activeEditor.document.uri.toString() !== savedDoc.uri.toString()) {
+      return;
+    }
 
     if (savedDoc.fileName.endsWith('.ctrl.ts')) {
-      // validate
-      validateCssCtrlDoc(savedDoc, cssCtrlDiagnosticCollection);
+      e.waitUntil(
+        (async () => {
+          // validate
+          validateCssCtrlDoc(savedDoc, cssCtrlDiagnosticCollection);
 
-      // check ถ้ายังมี error => ไม่ generate
-      const diags = cssCtrlDiagnosticCollection.get(savedDoc.uri);
-      const hasErr = diags && diags.some((d) => d.severity === vscode.DiagnosticSeverity.Error);
-      if (hasErr) {
-        return;
-      }
+          const diags = cssCtrlDiagnosticCollection.get(savedDoc.uri);
+          const hasErr = diags && diags.some((d) => d.severity === vscode.DiagnosticSeverity.Error);
+          if (hasErr) {
+            return;
+          }
 
-      // ถ้าไม่มี error => createCssCtrlCssFile
-      try {
-        await createCssCtrlCssFile(savedDoc);
-      } catch (err) {
-        return;
-      }
+          try {
+            await createCssCtrlCssFile(savedDoc);
+          } catch (err) {
+            return;
+          }
 
-      // no error => ctrl.generateGeneric
-      await vscode.commands.executeCommand('ctrl.generateGeneric');
-      // vscode.window.showInformationMessage('Created .ctrl.css and Generated Generic done!');
+          await vscode.commands.executeCommand('ctrl.generateGeneric');
+        })()
+      );
     }
   });
   context.subscriptions.push(willSaveDisposable);
@@ -272,15 +277,24 @@ export async function activate(context: vscode.ExtensionContext) {
   // --------------------------------------------------------------------------------
   // (NEW) เมื่อ save ไฟล์ ctrl.theme.ts => generate ctrl.theme.css
   // --------------------------------------------------------------------------------
-  const themeWillSaveDisposable = vscode.workspace.onWillSaveTextDocument(async (e) => {
+  const themeWillSaveDisposable = vscode.workspace.onWillSaveTextDocument((e) => {
     const savedDoc = e.document;
+    const activeEditor = vscode.window.activeTextEditor;
+
+    if (!activeEditor || activeEditor.document.uri.toString() !== savedDoc.uri.toString()) {
+      return;
+    }
 
     if (savedDoc.fileName.endsWith('ctrl.theme.ts')) {
-      try {
-        await createCssCtrlThemeCssFile(savedDoc);
-      } catch (error) {
-        console.error('Error generating ctrl.theme.css =>', error);
-      }
+      e.waitUntil(
+        (async () => {
+          try {
+            await createCssCtrlThemeCssFile(savedDoc);
+          } catch (error) {
+            console.error('Error generating ctrl.theme.css =>', error);
+          }
+        })()
+      );
     }
   });
   context.subscriptions.push(themeWillSaveDisposable);
