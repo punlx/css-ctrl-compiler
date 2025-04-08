@@ -10,7 +10,8 @@ import { IStyleDefinition } from '../types';
 export function parseStateStyle(
   abbrLine: string,
   styleDef: IStyleDefinition,
-  isConstContext: boolean = false
+  isConstContext: boolean = false,
+  isQueryBlock: boolean = false
 ) {
   const openParenIdx = abbrLine.indexOf('(');
   const funcName = abbrLine.slice(0, openParenIdx).trim();
@@ -30,12 +31,17 @@ export function parseStateStyle(
     const [abbr, val] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
 
-    // --- (ลบบล็อกเดิมที่เคยเช็ก localVar) ---
-
     const expansions = [`${abbr}[${val}]`];
     for (const ex of expansions) {
       const [abbr2, val2] = separateStyleAndProperties(ex);
       if (!abbr2) continue;
+
+      // ถ้า isQueryBlock && abbr2.startsWith('$') => throw
+      if (isQueryBlock && abbr2.startsWith('$')) {
+        throw new Error(
+          `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${ex}"`
+        );
+      }
 
       if (abbr2.startsWith('--&') && isImportant) {
         throw new Error(
@@ -43,20 +49,16 @@ export function parseStateStyle(
         );
       }
 
-      // --- ลบบล็อกที่เคยโยน error เมื่อไม่เจอใน styleDef.localVars --- 
-      // (เช่น if (!styleDef.localVars[varName]) throw new Error(...))
-
       const isVar = abbr2.startsWith('$');
       const realAbbr = isVar ? abbr2.slice(1) : abbr2;
 
-      // ใช้งาน typography ?
       if (isVar && realAbbr === 'ty') {
         throw new Error(
           `[CSS-CTRL-ERR] "$ty[...]": cannot use runtime variable to reference typography.`
         );
       }
 
-      // ถ้าเป็น ty(...) ตรงนี้ก็เหมือนโค้ดเดิม; หรือ globalTypographyDict...
+      // ถ้า realAbbr === 'ty' => parse typography (เดิม)
       if (realAbbr === 'ty') {
         const typKey = val2.trim();
         if (!globalTypographyDict[typKey]) {
@@ -85,21 +87,18 @@ export function parseStateStyle(
 
       const cProp = abbrMap[realAbbr as keyof typeof abbrMap];
       if (!cProp) {
-        throw new Error(
-          `[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap for state ${funcName}.`
-        );
+        throw new Error(`[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap for state ${funcName}.`);
       }
 
       let finalVal = convertCSSVariable(val2);
       if (isVar) {
-        // varState
         styleDef.varStates = styleDef.varStates || {};
         styleDef.varStates[funcName] = styleDef.varStates[funcName] || {};
         styleDef.varStates[funcName][realAbbr] = finalVal;
 
         result[cProp] = `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
       } else if (val2.includes('--&')) {
-        // ปล่อยให้ transform เป็น "LOCALVAR(varName)" (หรือแทนด้วย regex) 
+        // อย่าเช็กว่ามีใน localVars หรือไม่ -> ปล่อย
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;
         });

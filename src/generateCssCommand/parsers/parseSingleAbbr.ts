@@ -9,6 +9,14 @@ import { parsePseudoElementStyle } from './parsePseudoElementStyle';
 import { parseScreenStyle } from './parseScreenStyle';
 import { parseStateStyle } from './parseStateStyle';
 
+/**
+ * parseSingleAbbr
+ * @param abbrLine         ex. "bg[red]" or "hover(bg[red])" or "@query .box2 { ... }"
+ * @param styleDef 
+ * @param isConstContext   true => in @const or theme.define block
+ * @param isQueryBlock     true => we are inside an @query block (=> disallow $variable)
+ * @param isDefineContext  true => theme.define
+ */
 export function parseSingleAbbr(
   abbrLine: string,
   styleDef: IStyleDefinition,
@@ -18,12 +26,14 @@ export function parseSingleAbbr(
 ) {
   const trimmed = abbrLine.trim();
 
+  // ไม่อนุญาต $var ใน define block
   if (isDefineContext && /^\$[\w-]+\[/.test(trimmed)) {
     throw new Error(
       `[CSS-CTRL-ERR] $variable is not allowed in theme.define block. Found: "${trimmed}"`
     );
   }
 
+  // ไม่อนุญาต @query ใน @const/@define
   if (isConstContext && trimmed.startsWith('@query')) {
     throw new Error(
       `[CSS-CTRL-ERR] @query is not allowed in @const or theme.define() block. Found: "${trimmed}"`
@@ -51,29 +61,37 @@ export function parseSingleAbbr(
     styleDef.hasRuntimeVar = true;
   }
 
+  // ถ้ารูปแบบไม่มี "(", ให้ parseBaseStyle 
   const openParenIndex = trimmed.indexOf('(');
   if (openParenIndex === -1) {
     parseBaseStyle(trimmed, styleDef, isConstContext, isQueryBlock);
     return;
   }
 
-  const prefix = trimmed.slice(0, openParenIndex);
+  // ถ้าเจอ prefix => เช็กว่าเป็น state/pseudo/screen/container หรือเปล่า
+  const prefix = trimmed.slice(0, openParenIndex).trim();
+
+  // state
   if (knownStates.includes(prefix)) {
-    parseStateStyle(trimmed, styleDef, isConstContext);
+    parseStateStyle(trimmed, styleDef, isConstContext, isQueryBlock);
     return;
   }
+  // pseudo
   if (supportedPseudos.includes(prefix)) {
-    parsePseudoElementStyle(trimmed, styleDef, isConstContext);
+    parsePseudoElementStyle(trimmed, styleDef, isConstContext, isQueryBlock);
     return;
   }
+  // screen
   if (prefix === 'screen') {
-    parseScreenStyle(trimmed, styleDef, isConstContext);
+    parseScreenStyle(trimmed, styleDef, isConstContext, isQueryBlock);
     return;
   }
+  // container
   if (prefix === 'container') {
-    parseContainerStyle(trimmed, styleDef, isConstContext);
+    parseContainerStyle(trimmed, styleDef, isConstContext, isQueryBlock);
     return;
   }
 
+  // ไม่เข้าเคสไหน -> parseBaseStyle
   parseBaseStyle(trimmed, styleDef, isConstContext, isQueryBlock);
 }

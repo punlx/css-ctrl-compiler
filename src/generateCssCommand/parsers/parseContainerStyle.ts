@@ -10,7 +10,8 @@ import { IStyleDefinition } from '../types';
 export function parseContainerStyle(
   abbrLine: string,
   styleDef: IStyleDefinition,
-  isConstContext: boolean = false
+  isConstContext: boolean = false,
+  isQueryBlock: boolean = false
 ) {
   const openParenIdx = abbrLine.indexOf('(');
   let inside = abbrLine.slice(openParenIdx + 1, -1).trim();
@@ -63,11 +64,15 @@ export function parseContainerStyle(
     const [abbr, val] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
     const isVar = abbr.startsWith('$');
+
+    if (isQueryBlock && isVar) {
+      throw new Error(
+        `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${abbrLine}"`
+      );
+    }
     if (isVar) {
       throw new Error(`[CSS-CTRL-ERR] $variable cannot use in container. Found: "${abbrLine}"`);
     }
-
-    // --- ลบบล็อกเช็ก localVar --&xxx
 
     const expansions = [`${abbr}[${val}]`];
     for (const ex of expansions) {

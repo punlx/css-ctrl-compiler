@@ -10,7 +10,8 @@ import { IStyleDefinition } from '../types';
 export function parseScreenStyle(
   abbrLine: string,
   styleDef: IStyleDefinition,
-  isConstContext: boolean = false
+  isConstContext: boolean = false,
+  isQueryBlock: boolean = false
 ) {
   const openParenIdx = abbrLine.indexOf('(');
   let inside = abbrLine.slice(openParenIdx + 1, -1).trim();
@@ -63,11 +64,17 @@ export function parseScreenStyle(
     const [abbr, val] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
     const isVar = abbr.startsWith('$');
+
+    // ถ้า isQueryBlock && isVar => throw
+    if (isQueryBlock && isVar) {
+      throw new Error(
+        `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${abbrLine}"`
+      );
+    }
+
     if (isVar) {
       throw new Error(`[CSS-CTRL-ERR] $variable cannot use in screen. Found: "${abbrLine}"`);
     }
-
-    // --- ลบบล็อกเช็ก localVar --&xxx
 
     const expansions = [`${abbr}[${val}]`];
     for (const ex of expansions) {
@@ -75,7 +82,6 @@ export function parseScreenStyle(
       if (!abbr2) continue;
 
       if (abbr2 === 'ty') {
-        // ใช้ typography
         const typKey = val2.trim();
         if (!globalTypographyDict[typKey]) {
           throw new Error(
@@ -105,7 +111,6 @@ export function parseScreenStyle(
       if (!cProp) {
         throw new Error(`[CSS-CTRL-ERR] "${abbr2}" not found in abbrMap (screen).`);
       }
-
       if (val2.includes('--&')) {
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;

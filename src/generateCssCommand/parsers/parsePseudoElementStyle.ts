@@ -10,7 +10,8 @@ import { IStyleDefinition } from '../types';
 export function parsePseudoElementStyle(
   abbrLine: string,
   styleDef: IStyleDefinition,
-  isConstContext: boolean = false
+  isConstContext: boolean = false,
+  isQueryBlock: boolean = false
 ) {
   const openParenIdx = abbrLine.indexOf('(');
   const pseudoName = abbrLine.slice(0, openParenIdx).trim();
@@ -31,8 +32,6 @@ export function parsePseudoElementStyle(
     const [abbr, val] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
 
-    // --- (ลบบล็อกที่เคยเช็ก localVar) ---
-
     if (abbr === 'ct') {
       // content
       result['content'] = `"${val}"` + (isImportant ? ' !important' : '');
@@ -44,6 +43,13 @@ export function parsePseudoElementStyle(
       const [abbr2, val2] = separateStyleAndProperties(ex);
       if (!abbr2) continue;
 
+      // ถ้า isQueryBlock && abbr2.startsWith('$') => error
+      if (isQueryBlock && abbr2.startsWith('$')) {
+        throw new Error(
+          `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${ex}"`
+        );
+      }
+
       const isVariable = abbr2.startsWith('$');
       const realAbbr = isVariable ? abbr2.slice(1) : abbr2;
 
@@ -53,7 +59,6 @@ export function parsePseudoElementStyle(
         );
       }
 
-      // ใช้ typography?
       if (realAbbr === 'ty') {
         const typKey = val2.trim();
         if (!globalTypographyDict[typKey]) {
@@ -89,11 +94,10 @@ export function parsePseudoElementStyle(
 
       const finalVal = convertCSSVariable(val2);
       if (isVariable) {
-        // runtime var
+        // varPseudos
         styleDef.varPseudos[pseudoName]![realAbbr] = finalVal;
         result[cProp] = `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
       } else if (val2.includes('--&')) {
-        // ใช้ localVar → อย่าโยน error
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;
         });
