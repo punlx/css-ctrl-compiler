@@ -37,7 +37,7 @@ export function parseSingleAbbr(
   if (isQueryBlock) {
     if (/^--&[\w-]+\[/.test(trimmed)) {
       throw new Error(
-        `[CSS-CTRL-ERR] Local var not allowed inside @query block. Found: "${trimmed}"`
+        `[CSS-CTRL-ERR] Local variables are not allowed to be created inside a @query block. Found: "${trimmed}"`
       );
     }
     if (/^\$[\w-]+\[/.test(trimmed)) {
