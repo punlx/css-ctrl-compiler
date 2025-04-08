@@ -113,7 +113,7 @@ export const cssValues: Record<string, string[]> = {
   /********************************************
    * Background
    ********************************************/
-  'background-color': ['<color>', 'transparent', 'currentcolor', 'inherit', 'initial', 'unset'],
+  'background-color': ['<color>', 'transparent', 'currentColor', 'inherit', 'initial', 'unset'],
   'background-position': [
     'left top',
     'left center',
@@ -315,7 +315,7 @@ export const cssValues: Record<string, string[]> = {
   /********************************************
    * Color, Cursor
    ********************************************/
-  color: ['<color>', 'currentcolor', 'inherit', 'initial', 'unset'],
+  color: ['<color>', 'currentColor', 'inherit', 'initial', 'unset'],
   cursor: [
     'auto',
     'default',
