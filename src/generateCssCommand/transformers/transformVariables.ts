@@ -2,7 +2,7 @@
 
 import { IStyleDefinition } from '../types';
 
-export function transFormVariables(
+export function transformVariables(
   styleDef: IStyleDefinition,
   scopeName: string,
   className: string

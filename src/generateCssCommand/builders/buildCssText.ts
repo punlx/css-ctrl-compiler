@@ -4,7 +4,7 @@ import { IStyleDefinition } from '../types';
 
 /**
  * สร้าง CSS text จาก styleDef รวม base/states/screens/pseudos
- * + (ใหม่) เรียก buildNestedQueryCss ถ้ามี nestedQueries
+ * แล้ว (ใหม่) ถ้ามี styleDef.nestedQueries => ใช้ buildNestedQueryCss
  */
 export function buildCssText(displayName: string, styleDef: IStyleDefinition): string {
   let cssText = '';
@@ -20,17 +20,19 @@ export function buildCssText(displayName: string, styleDef: IStyleDefinition): s
     }
   }
 
-  // base
+  // base + localVars
   let baseProps = '';
   const localVars = (styleDef as any)._resolvedLocalVars as Record<string, string> | undefined;
   if (localVars) {
+    // ประกาศ local var ของ block นี้ (top-level)
     for (const localVarName in localVars) {
       baseProps += `${localVarName}:${localVars[localVarName]};`;
     }
   }
   if (Object.keys(styleDef.base).length > 0) {
     for (const prop in styleDef.base) {
-      baseProps += `${prop}:${styleDef.base[prop]};`;
+      const replacedVal = replaceLocalVarUsage(styleDef.base[prop], displayName);
+      baseProps += `${prop}:${replacedVal};`;
     }
   }
   if (baseProps) {
@@ -42,7 +44,8 @@ export function buildCssText(displayName: string, styleDef: IStyleDefinition): s
     const obj = styleDef.states[state];
     let props = '';
     for (const p in obj) {
-      props += `${p}:${obj[p]};`;
+      const replacedVal = replaceLocalVarUsage(obj[p], displayName);
+      props += `${p}:${replacedVal};`;
     }
     cssText += `.${displayName}:${state}{${props}}`;
   }
@@ -51,7 +54,8 @@ export function buildCssText(displayName: string, styleDef: IStyleDefinition): s
   for (const scr of styleDef.screens) {
     let props = '';
     for (const p in scr.props) {
-      props += `${p}:${scr.props[p]};`;
+      const replacedVal = replaceLocalVarUsage(scr.props[p], displayName);
+      props += `${p}:${replacedVal};`;
     }
     cssText += `@media only screen and ${scr.query}{.${displayName}{${props}}}`;
   }
@@ -60,7 +64,8 @@ export function buildCssText(displayName: string, styleDef: IStyleDefinition): s
   for (const ctnr of styleDef.containers) {
     let props = '';
     for (const p in ctnr.props) {
-      props += `${p}:${ctnr.props[p]};`;
+      const replacedVal = replaceLocalVarUsage(ctnr.props[p], displayName);
+      props += `${p}:${replacedVal};`;
     }
     cssText += `@container ${ctnr.query}{.${displayName}{${props}}}`;
   }
@@ -73,22 +78,19 @@ export function buildCssText(displayName: string, styleDef: IStyleDefinition): s
 
       let pseudoProps = '';
       for (const prop in pseudoObj) {
-        pseudoProps += `${prop}:${pseudoObj[prop]};`;
+        const replacedVal = replaceLocalVarUsage(pseudoObj[prop], displayName);
+        pseudoProps += `${prop}:${replacedVal};`;
       }
-
-      const pseudoSelector = `::${pseudoKey}`;
-      cssText += `.${displayName}${pseudoSelector}{${pseudoProps}}`;
+      cssText += `.${displayName}::${pseudoKey}{${pseudoProps}}`;
     }
   }
 
-  // (OLD) queries => ลบหรือตัดออก, ไม่ใช้ buildQueryCssText อีก
-  // if (styleDef.queries && styleDef.queries.length > 0) { ... }
-
-  // (NEW) nestedQueries => สร้างด้วย buildNestedQueryCss
+  // (OLD) styleDef.queries => (ไม่ใช้แล้ว)
+  // (NEW) nestedQueries => recursive
   if (styleDef.nestedQueries && styleDef.nestedQueries.length > 0) {
     for (const nq of styleDef.nestedQueries) {
       // @ts-ignore
-      cssText += buildNestedQueryCss(displayName, nq);
+      cssText += buildNestedQueryCss(displayName, nq, displayName);
     }
   }
 
@@ -96,64 +98,55 @@ export function buildCssText(displayName: string, styleDef: IStyleDefinition): s
 }
 
 /**
- * buildNestedQueryCss - recursive
+ * buildNestedQueryCss - สร้าง CSS สำหรับ @query แบบ nested
+ * @param parentDisplayName : string ของ parent (เช่น "app_box", "box_AbCdE")
+ * @param node : { selector, styleDef, children[] }
+ * @param rootDisplayName : ใช้แทน LOCALVAR(...) (เพราะ localVar ผูกกับ displayName ของคลาสแม่)
  */
 function buildNestedQueryCss(
-  parentSelector: string,
+  parentDisplayName: string,
   node: {
     selector: string;
     styleDef: IStyleDefinition;
     children: any[];
-  }
+  },
+  rootDisplayName: string
 ): string {
-  const finalSelector = transformNestedSelector(parentSelector, node.selector);
+  const finalSelector = transformNestedSelector(parentDisplayName, node.selector);
+  let out = buildRawCssText(finalSelector, node.styleDef, rootDisplayName);
 
-  // สร้าง CSS ของ styleDef แต่ใช้ finalSelector
-  let out = buildRawCssText(finalSelector, node.styleDef);
-
-  // recursion children
   for (const c of node.children) {
-    out += buildNestedQueryCss(finalSelector.replace(/^\./, ''), c);
-    // หมายเหตุ: ข้างบน .replace(/^\./, '') ทำให้เราถอดจุดหน้าออก
-    //           เพื่อส่งไปเป็น parentSel (เช่น "box .box2") แทน ".box .box2"
+    // เปลี่ยน .xxx -> xxx เวลา pass ลงไป (เช่น .app_box .box1 -> 'app_box .box1')
+    out += buildNestedQueryCss(finalSelector.replace(/^\./, ''), c, rootDisplayName);
   }
 
   return out;
 }
 
 /**
- * ถ้า childSel มี '&' => แทนด้วย ".parentSel"
- * ไม่งั้น => ".parentSel childSel"
- *
- * หมายเหตุ: parentSel เข้ามาเป็น "box", "box .box2", ฯลฯ โดยยังไม่มีจุดนำ
- *           แต่ตอน build base ใน buildCssText ใช้ ".box{...}"
- *           เราเลยใส่จุดในฟังก์ชันนี้
+ * buildRawCssText - สร้าง CSS จาก styleDef 1 ชุด
+ *   แต่แทน LOCALVAR(...) ด้วยข้อมูลจาก rootDisplayName
  */
-function transformNestedSelector(parentSel: string, childSel: string): string {
-  const trimmed = childSel.trim();
-  if (trimmed.includes('&')) {
-    return trimmed.replace(/&/g, `.${parentSel}`);
-  }
-  // default => .box .box2
-  return `.${parentSel} ${trimmed}`;
-}
-
-/**
- * buildRawCssText - สร้าง CSS block จาก styleDef แต่ selector = finalSelector
- */
-function buildRawCssText(finalSelector: string, styleDef: IStyleDefinition): string {
+function buildRawCssText(
+  finalSelector: string,
+  styleDef: IStyleDefinition,
+  rootDisplayName: string
+): string {
   let cssText = '';
 
-  // base
+  // localVars (ถ้ามี) - แต่นี่คือ "child def" ตาม design ไม่ควรมี localVars
+  // ถ้ามี -> จะประกาศซ้ำ (ซึ่งตาม logic ใหม่เราไม่อนุญาตแล้ว) - แค่กันเผื่อ
   let baseProps = '';
-  if ((styleDef as any)._resolvedLocalVars) {
-    const lvs = (styleDef as any)._resolvedLocalVars as Record<string, string>;
+  const lvs = (styleDef as any)._resolvedLocalVars as Record<string, string> | undefined;
+  if (lvs) {
     for (const localVarName in lvs) {
       baseProps += `${localVarName}:${lvs[localVarName]};`;
     }
   }
+
   for (const p in styleDef.base) {
-    baseProps += `${p}:${styleDef.base[p]};`;
+    const replacedVal = replaceLocalVarUsage(styleDef.base[p], rootDisplayName);
+    baseProps += `${p}:${replacedVal};`;
   }
   if (baseProps) {
     cssText += `${dotIfNeeded(finalSelector)}{${baseProps}}`;
@@ -164,7 +157,7 @@ function buildRawCssText(finalSelector: string, styleDef: IStyleDefinition): str
     const obj = styleDef.states[st];
     let props = '';
     for (const p in obj) {
-      props += `${p}:${obj[p]};`;
+      props += `${p}:${replaceLocalVarUsage(obj[p], rootDisplayName)};`;
     }
     cssText += `${dotIfNeeded(finalSelector)}:${st}{${props}}`;
   }
@@ -173,7 +166,7 @@ function buildRawCssText(finalSelector: string, styleDef: IStyleDefinition): str
   for (const scr of styleDef.screens) {
     let props = '';
     for (const p in scr.props) {
-      props += `${p}:${scr.props[p]};`;
+      props += `${p}:${replaceLocalVarUsage(scr.props[p], rootDisplayName)};`;
     }
     cssText += `@media only screen and ${scr.query}{${dotIfNeeded(finalSelector)}{${props}}}`;
   }
@@ -182,7 +175,7 @@ function buildRawCssText(finalSelector: string, styleDef: IStyleDefinition): str
   for (const ctnr of styleDef.containers) {
     let props = '';
     for (const p in ctnr.props) {
-      props += `${p}:${ctnr.props[p]};`;
+      props += `${p}:${replaceLocalVarUsage(ctnr.props[p], rootDisplayName)};`;
     }
     cssText += `@container ${ctnr.query}{${dotIfNeeded(finalSelector)}{${props}}}`;
   }
@@ -195,7 +188,7 @@ function buildRawCssText(finalSelector: string, styleDef: IStyleDefinition): str
 
       let pseudoProps = '';
       for (const prop in pseudoObj) {
-        pseudoProps += `${prop}:${pseudoObj[prop]};`;
+        pseudoProps += `${prop}:${replaceLocalVarUsage(pseudoObj[prop], rootDisplayName)};`;
       }
       cssText += `${dotIfNeeded(finalSelector)}::${pseudoKey}{${pseudoProps}}`;
     }
@@ -204,9 +197,29 @@ function buildRawCssText(finalSelector: string, styleDef: IStyleDefinition): str
   return cssText;
 }
 
-/** ป้องกันกรณี finalSelector ไม่มีจุดนำ เช่น "box" หรือ "box .box2" */
+/** transformNestedSelector: "&" => .parentSel, otherwise => ".parentSel childSel" */
+function transformNestedSelector(parentSel: string, childSel: string): string {
+  const trimmed = childSel.trim();
+  if (trimmed.includes('&')) {
+    // e.g. &.box2 => .parentSel.box2
+    return trimmed.replace(/&/g, `.${parentSel}`);
+  }
+  // default => .parentSel childSel
+  return `.${parentSel} ${trimmed}`;
+}
+
+/** ป้องกันกรณี finalSelector ไม่มีจุด */
 function dotIfNeeded(sel: string) {
-  // ถ้า sel เริ่มด้วย '.' อยู่แล้ว ให้คืนเหมือนเดิม
   if (sel.startsWith('.')) return sel;
   return '.' + sel;
+}
+
+/**
+ * replaceLocalVarUsage - แทน "LOCALVAR(varName)" เป็น "var(--varName-<displayName>)"
+ */
+function replaceLocalVarUsage(input: string, displayName: string): string {
+  const placeholderRegex = /LOCALVAR\(([\w-]+)\)/g;
+  return input.replace(placeholderRegex, (_, varName) => {
+    return `var(--${varName}-${displayName})`;
+  });
 }

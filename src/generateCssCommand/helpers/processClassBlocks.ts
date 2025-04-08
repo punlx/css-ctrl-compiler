@@ -7,13 +7,17 @@ import { createEmptyStyleDef } from './createEmptyStyleDef';
 
 import { parseNestedQueryBlocks } from '../utils/parseNestedQueryBlocks';
 
-// (ใหม่) import ฟังก์ชัน transformVariables & transformLocalVariables
-import { transFormVariables } from '../transformers/transformVariables';
+// (NEW) import transformVariables & transformLocalVariables
+// @ts-ignore
+import { transformVariables } from '../transformers/transFormVariables';
 import { transformLocalVariables } from '../transformers/transformLocalVariables';
 
-// (ถ้าเคยมี scope hash)
-import { makeFinalName } from '../utils/sharedScopeUtils'; // หรือแก้ path ตามจริง
+// (ถ้าใช้ scope=hash => makeFinalName)
+import { makeFinalName } from '../utils/sharedScopeUtils';
 
+/**
+ * parseNestedQueryDef: เปลี่ยนมาไม่ copy parentDef.localVars -> subDef
+ */
 // @ts-ignore
 function parseNestedQueryDef(
   queries: any[],
@@ -25,10 +29,10 @@ function parseNestedQueryDef(
     // สร้าง styleDef ลูก
     const subDef = createEmptyStyleDef();
 
-    // copy localVars จาก parent (ให้ลูกอ่านได้)
-    if (parentDef.localVars) {
-      subDef.localVars = { ...parentDef.localVars };
-    }
+    // (ลบออก) ไม่ copy localVars:
+    // if (parentDef.localVars) {
+    //   subDef.localVars = { ...parentDef.localVars };
+    // }
 
     // แยก @use vs line ปกติ
     const usedConstNames: string[] = [];
@@ -41,21 +45,33 @@ function parseNestedQueryDef(
       }
     }
 
-    // merge const
     for (const cName of usedConstNames) {
       if (!constMap.has(cName)) {
         throw new Error(`[SWD-ERR] @use unknown const "${cName}" in nested @query.`);
       }
       const partialDef = constMap.get(cName)!;
+      // ห้าม partialDef.hasRuntimeVar => throw ...
+      if (partialDef.hasRuntimeVar) {
+        throw new Error(
+          `[SWD-ERR] @use "${cName}" has $variable, not allowed inside nested @query block.`
+        );
+      }
+      // TODO: ถ้า partialDef มี localVar => policy ว่ายังไง?
+      // ถ้าห้าม -> ก็ต้อง throw เหมือนกัน
+      if (partialDef.localVars) {
+        throw new Error(
+          `[SWD-ERR] @use "${cName}" has localVar, not allowed inside nested @query block.`
+        );
+      }
       mergeStyleDef(subDef, partialDef);
     }
 
-    // parse normal lines => parseSingleAbbr
-    for (const ln of normalLines) {
-      parseSingleAbbr(ln, subDef);
+    // parse normal lines => parseSingleAbbr (isQueryBlock = true)
+    for (const qLn of normalLines) {
+      parseSingleAbbr(qLn, subDef, false, true /* isQueryBlock */, false);
     }
 
-    // children -> recursive
+    // recursive children
     // @ts-ignore
     const childrenParsed = parseNestedQueryDef(node.children, subDef, constMap);
 
@@ -69,7 +85,7 @@ function parseNestedQueryDef(
 }
 
 /**
- * processClassBlocks - parse แต่ละคลาส => สร้าง styleDef => ใส่ลง map
+ * processClassBlocks - parse .className { ... } => สร้าง styleDef => ใส่ลง map
  */
 export function processClassBlocks(
   scopeName: string,
@@ -81,6 +97,7 @@ export function processClassBlocks(
 
   for (const block of classBlocks) {
     const clsName = block.className;
+
     if (localClasses.has(clsName)) {
       throw new Error(
         `[SWD-ERR] Duplicate class ".${clsName}" in scope "${scopeName}" (same file).`
@@ -90,10 +107,10 @@ export function processClassBlocks(
 
     const classStyleDef = createEmptyStyleDef();
 
-    // 1) parse nested queries
+    // (A) parse nested queries
     const { lines, queries } = parseNestedQueryBlocks(block.body);
 
-    // 2) แยก @use กับ line ปกติ
+    // (B) แยก @use vs normal line
     let usedConstNames: string[] = [];
     const normalLines: string[] = [];
     for (const ln of lines) {
@@ -104,7 +121,7 @@ export function processClassBlocks(
       }
     }
 
-    // 3) mergeConst ถ้ามี
+    // (C) merge const ถ้ามี
     for (const cName of usedConstNames) {
       if (!constMap.has(cName)) {
         throw new Error(`[SWD-ERR] @use refers to unknown const "${cName}".`);
@@ -113,15 +130,15 @@ export function processClassBlocks(
       mergeStyleDef(classStyleDef, partialDef);
     }
 
-    // 4) parse normal lines => parseSingleAbbr
+    // (D) parse normal lines => parseSingleAbbr
     for (const ln of normalLines) {
       parseSingleAbbr(ln, classStyleDef);
     }
 
-    // 5) parse nested queries => ใส่ใน styleDef.nestedQueries
+    // (E) parse nested queries => เก็บใน styleDef.nestedQueries
     classStyleDef.nestedQueries = parseNestedQueryDef(queries, classStyleDef, constMap);
 
-    // 6) ตรวจว่าใช้ local var ก่อนประกาศหรือไม่ (เหมือนเดิม)
+    // (F) เช็คว่าใช้ local var ก่อนประกาศหรือไม่
     if ((classStyleDef as any)._usedLocalVars) {
       for (const usedVar of (classStyleDef as any)._usedLocalVars) {
         if (!classStyleDef.localVars || !(usedVar in classStyleDef.localVars)) {
@@ -132,34 +149,17 @@ export function processClassBlocks(
       }
     }
 
-    // 7) ทำชื่อ finalKey (กรณีถ้าอยาก hash)
+    // (G) ใช้ฟังก์ชันกลาง makeFinalName(...) แทน if-else
     const finalKey = makeFinalName(scopeName, clsName, block.body);
-    // หรือถ้าไม่ใช้ hash => const finalKey = clsName;
 
-    // *** (สำคัญ) transform variable ให้ครบ (parent + child) ***
-    transFormVariables(classStyleDef, scopeName, clsName);
+    // *** transform variable (เฉพาะ parent) ***
+    // เราไม่ลงไป transform childDef นะ
+    transformVariables(classStyleDef, scopeName, clsName);
     transformLocalVariables(classStyleDef, scopeName, clsName);
-    transformNestedQueriesRec(classStyleDef, scopeName, clsName);
 
     // เก็บลง map
     result.set(finalKey, classStyleDef);
   }
 
   return result;
-}
-
-/**
- * transformNestedQueriesRec - เดินลงไป transform styleDef ลูกทุกชั้น
- */
-function transformNestedQueriesRec(def: IStyleDefinition, scopeName: string, className: string) {
-  if (!def.nestedQueries) return;
-  for (const node of def.nestedQueries) {
-    // @ts-ignore
-    const childDef = node.styleDef;
-    // transform
-    transFormVariables(childDef, scopeName, className);
-    transformLocalVariables(childDef, scopeName, className);
-    // แล้วลงลึก child
-    transformNestedQueriesRec(childDef, scopeName, className);
-  }
 }

@@ -30,16 +30,15 @@ export function parseSingleAbbr(
     );
   }
 
-  if (isQueryBlock && trimmed.startsWith('@query')) {
-    throw new Error(`[CSS-CTRL-ERR] Nested @query is not allowed.`);
-  }
-
+  // (ยังคง) ถ้าอยู่ใน @query block => ห้ามประกาศ localVar, ห้ามใช้ $variable
   if (isQueryBlock) {
+    // ห้าม "ประกาศ" localVar
     if (/^--&[\w-]+\[/.test(trimmed)) {
       throw new Error(
-        `[CSS-CTRL-ERR] Local variables are not allowed to be created inside a @query block. Found: "${trimmed}"`
+        `[CSS-CTRL-ERR] Local var not allowed to declare inside @query block. Found: "${trimmed}"`
       );
     }
+    // ห้าม $variable
     if (/^\$[\w-]+\[/.test(trimmed)) {
       throw new Error(
         `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${trimmed}"`
@@ -47,6 +46,7 @@ export function parseSingleAbbr(
     }
   }
 
+  // ถ้าสไตล์นี้ยังไม่มี hasRuntimeVar แล้วเจอ $var => ติด flag
   if (!styleDef.hasRuntimeVar && /\$[\w-]+\[/.test(trimmed)) {
     styleDef.hasRuntimeVar = true;
   }

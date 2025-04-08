@@ -8,7 +8,7 @@ import { ensureScopeUnique } from './utils/ensureScopeUnique';
 import { parseDirectives } from './parsers/parseDirectives';
 import { processClassBlocks } from './helpers/processClassBlocks';
 import { handleBindDirectives } from './utils/handleBindDirectives';
-import { transFormVariables } from './transformers/transformVariables';
+import { transformVariables } from './transformers/transFormVariables';
 import { transformLocalVariables } from './transformers/transformLocalVariables';
 import { buildCssText } from './builders/buildCssText';
 import { IStyleDefinition } from './types';
@@ -66,13 +66,13 @@ export function generateCssCtrlCssFromSource(sourceText: string): string {
     }
 
     // (F1) transform variable (parent)
-    transFormVariables(styleDef, scopeName, className);
+    transformVariables(styleDef, scopeName, className);
     transformLocalVariables(styleDef, scopeName, className);
 
     // (F2) ถ้ามี query block => transform ด้วย
     // @ts-ignore
     if (styleDef.queries && styleDef.queries.length > 0) {
-    // @ts-ignore
+      // @ts-ignore
       for (const qb of styleDef.queries) {
         // copy localVars จาก parent ถ้าจำเป็น
         if (!qb.styleDef.localVars) {
@@ -83,7 +83,7 @@ export function generateCssCtrlCssFromSource(sourceText: string): string {
         }
 
         // transform query block
-        transFormVariables(qb.styleDef, scopeName, className);
+        transformVariables(qb.styleDef, scopeName, className);
         transformLocalVariables(qb.styleDef, scopeName, className);
       }
     }
