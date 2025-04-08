@@ -22,7 +22,6 @@ export function parseContainerStyle(
   let containerPart = inside.slice(0, commaIdx).trim();
   const propsPart = inside.slice(commaIdx + 1).trim();
 
-  // เช็ค breakpoint dict (TODO เดิม)
   if (!(containerPart.startsWith('min') || containerPart.startsWith('max'))) {
     if (globalBreakpointDict[containerPart]) {
       containerPart = globalBreakpointDict[containerPart];
@@ -67,28 +66,14 @@ export function parseContainerStyle(
     if (isVar) {
       throw new Error(`[CSS-CTRL-ERR] $variable cannot use in container. Found: "${abbrLine}"`);
     }
-    // ตรวจ local var, etc. (เหมือนเดิม)
-    if (abbr.includes('--&')) {
-      const localVarMatches = abbr.match(/--&([\w-]+)/g) || [];
-      for (const matchVar of localVarMatches) {
-        const localVarName = matchVar.replace('--&', '');
-        if (!styleDef.localVars?.[localVarName]) {
-          throw new Error(
-            `[CSS-CTRL-ERR] Using local var "${matchVar}" in container(...) before it is declared in base.`
-          );
-        }
-      }
-    }
 
-    // แตก expansions
+    // --- ลบบล็อกเช็ก localVar --&xxx
+
     const expansions = [`${abbr}[${val}]`];
     for (const ex of expansions) {
       const [abbr2, val2] = separateStyleAndProperties(ex);
       if (!abbr2) continue;
 
-      // -------------------------------------------
-      // (NEW) TODO ใช้ typography ใน container
-      // -------------------------------------------
       if (abbr2 === 'ty') {
         const typKey = val2.trim();
         if (!globalTypographyDict[typKey]) {
@@ -96,15 +81,11 @@ export function parseContainerStyle(
             `[CSS-CTRL-ERR] Typography key "${typKey}" not found in theme.typography(...) (container).`
           );
         }
-        // เช่น "fs[16px] fw[400] ..."
         const styleStr = globalTypographyDict[typKey];
-        // แตกเป็น token ย่อย
         const tokens = styleStr.split(/\s+/);
         for (const tk of tokens) {
-          // แต่ละ token เช่น "fs[16px]"
           const { line: tkNoBang, isImportant: tkImp } = detectImportantSuffix(tk);
           const [subAbbr, subVal] = separateStyleAndProperties(tkNoBang);
-
           if (!subAbbr) continue;
 
           const cProp2 = abbrMap[subAbbr as keyof typeof abbrMap];
@@ -119,31 +100,11 @@ export function parseContainerStyle(
         continue;
       }
 
-      // -------------------------------------------
-      // กรณีปกติ
-      // -------------------------------------------
-      if (abbr2.startsWith('--&') && isImportant) {
-        throw new Error(
-          `[CSS-CTRL-ERR] !important is not allowed with local var (${abbr2}) in container.`
-        );
-      }
-
-      if (val2.includes('--&')) {
-        const usedLocalVars = val2.match(/--&([\w-]+)/g) || [];
-        for (const usage of usedLocalVars) {
-          const localVarName = usage.replace('--&', '');
-          if (!styleDef.localVars?.[localVarName]) {
-            throw new Error(
-              `[CSS-CTRL-ERR] Using local var "${usage}" in container(...) before it is declared in base.`
-            );
-          }
-        }
-      }
-
       const cProp2 = abbrMap[abbr2 as keyof typeof abbrMap];
       if (!cProp2) {
         throw new Error(`[CSS-CTRL-ERR] "${abbr2}" not found in abbrMap (container).`);
       }
+
       if (val2.includes('--&')) {
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;

@@ -67,45 +67,15 @@ export function parseScreenStyle(
       throw new Error(`[CSS-CTRL-ERR] $variable cannot use in screen. Found: "${abbrLine}"`);
     }
 
-    if (abbr.includes('--&')) {
-      const localVarMatches = abbr.match(/--&([\w-]+)/g) || [];
-      for (const matchVar of localVarMatches) {
-        const localVarName = matchVar.replace('--&', '');
-        if (!styleDef.localVars?.[localVarName]) {
-          throw new Error(
-            `[CSS-CTRL-ERR] Using local var "${matchVar}" in screen(...) before it is declared in base.`
-          );
-        }
-      }
-    }
+    // --- ลบบล็อกเช็ก localVar --&xxx
 
     const expansions = [`${abbr}[${val}]`];
     for (const ex of expansions) {
       const [abbr2, val2] = separateStyleAndProperties(ex);
       if (!abbr2) continue;
 
-      if (abbr2.startsWith('--&') && isImportant) {
-        throw new Error(
-          `[CSS-CTRL-ERR] !important is not allowed with local var (${abbr2}) in screen.`
-        );
-      }
-
-      if (val2.includes('--&')) {
-        const usedLocalVars = val2.match(/--&([\w-]+)/g) || [];
-        for (const usage of usedLocalVars) {
-          const localVarName = usage.replace('--&', '');
-          if (!styleDef.localVars?.[localVarName]) {
-            throw new Error(
-              `[CSS-CTRL-ERR] Using local var "${usage}" in screen(...) before it is declared in base.`
-            );
-          }
-        }
-      }
-
-      // -------------------------------------------
-      // (NEW) TODO ใช้ typography ใน screen
-      // -------------------------------------------
       if (abbr2 === 'ty') {
+        // ใช้ typography
         const typKey = val2.trim();
         if (!globalTypographyDict[typKey]) {
           throw new Error(
@@ -131,13 +101,11 @@ export function parseScreenStyle(
         continue;
       }
 
-      // -------------------------------------------
-      // กรณีปกติ
-      // -------------------------------------------
       const cProp = abbrMap[abbr2 as keyof typeof abbrMap];
       if (!cProp) {
         throw new Error(`[CSS-CTRL-ERR] "${abbr2}" not found in abbrMap (screen).`);
       }
+
       if (val2.includes('--&')) {
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;

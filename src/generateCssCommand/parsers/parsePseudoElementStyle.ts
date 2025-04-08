@@ -31,25 +31,10 @@ export function parsePseudoElementStyle(
     const [abbr, val] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
 
-    if (abbr.includes('--&')) {
-      const localVarMatches = abbr.match(/--&([\w-]+)/g) || [];
-      for (const matchVar of localVarMatches) {
-        const localVarName = matchVar.replace('--&', '');
-        if (!styleDef.localVars?.[localVarName]) {
-          throw new Error(
-            `[CSS-CTRL-ERR] Using local var "${matchVar}" in pseudo ${pseudoName} before it is declared in base.`
-          );
-        }
-      }
-    }
-
-    if (abbr.startsWith('--&') && isImportant) {
-      throw new Error(
-        `[CSS-CTRL-ERR] !important is not allowed with local var (${abbr}) in pseudo ${pseudoName}.`
-      );
-    }
+    // --- (ลบบล็อกที่เคยเช็ก localVar) ---
 
     if (abbr === 'ct') {
+      // content
       result['content'] = `"${val}"` + (isImportant ? ' !important' : '');
       continue;
     }
@@ -61,29 +46,14 @@ export function parsePseudoElementStyle(
 
       const isVariable = abbr2.startsWith('$');
       const realAbbr = isVariable ? abbr2.slice(1) : abbr2;
-      if (isVariable) {
-        if (realAbbr === 'ty') {
-          throw new Error(
-            `[CSS-CTRL-ERR] "$ty[...]": cannot use runtime variable to reference typography.`
-          );
-        }
+
+      if (isVariable && realAbbr === 'ty') {
+        throw new Error(
+          `[CSS-CTRL-ERR] "$ty[...]": cannot use runtime variable to reference typography.`
+        );
       }
 
-      if (val2.includes('--&')) {
-        const usedLocalVars = val2.match(/--&([\w-]+)/g) || [];
-        for (const usage of usedLocalVars) {
-          const localVarName = usage.replace('--&', '');
-          if (!styleDef.localVars?.[localVarName]) {
-            throw new Error(
-              `[CSS-CTRL-ERR] Using local var "${usage}" in pseudo ${pseudoName} before it is declared in base.`
-            );
-          }
-        }
-      }
-
-      // -------------------------------------------
-      // (NEW) TODO ใช้ typography ใน pseudo
-      // -------------------------------------------
+      // ใช้ typography?
       if (realAbbr === 'ty') {
         const typKey = val2.trim();
         if (!globalTypographyDict[typKey]) {
@@ -91,11 +61,9 @@ export function parsePseudoElementStyle(
             `[CSS-CTRL-ERR] Typography key "${typKey}" not found in theme.typography(...) for pseudo ${pseudoName}.`
           );
         }
-        // เช่น "fs[16px] fw[400] ..."
         const styleStr = globalTypographyDict[typKey];
         const tokens = styleStr.split(/\s+/);
         for (const tk of tokens) {
-          // แตก token
           const { line: tkNoBang, isImportant: tkImp } = detectImportantSuffix(tk);
           const [subAbbr, subVal] = separateStyleAndProperties(tkNoBang);
           if (!subAbbr) continue;
@@ -107,7 +75,6 @@ export function parsePseudoElementStyle(
             );
           }
           const finalVal = convertCSSVariable(subVal);
-          // ใส่ใน pseudo
           result[cProp] = finalVal + (tkImp ? ' !important' : '');
         }
         continue;
@@ -122,9 +89,11 @@ export function parsePseudoElementStyle(
 
       const finalVal = convertCSSVariable(val2);
       if (isVariable) {
+        // runtime var
         styleDef.varPseudos[pseudoName]![realAbbr] = finalVal;
         result[cProp] = `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
       } else if (val2.includes('--&')) {
+        // ใช้ localVar → อย่าโยน error
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;
         });

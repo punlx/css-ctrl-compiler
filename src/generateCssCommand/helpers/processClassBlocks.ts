@@ -47,20 +47,20 @@ function parseNestedQueryDef(
 
     for (const cName of usedConstNames) {
       if (!constMap.has(cName)) {
-        throw new Error(`[SWD-ERR] @use unknown const "${cName}" in nested @query.`);
+        throw new Error(`[CSS-CTRL-ERR] @use unknown const "${cName}" in nested @query.`);
       }
       const partialDef = constMap.get(cName)!;
       // ห้าม partialDef.hasRuntimeVar => throw ...
       if (partialDef.hasRuntimeVar) {
         throw new Error(
-          `[SWD-ERR] @use "${cName}" has $variable, not allowed inside nested @query block.`
+          `[CSS-CTRL-ERR] @use "${cName}" has $variable, not allowed inside nested @query block.`
         );
       }
       // TODO: ถ้า partialDef มี localVar => policy ว่ายังไง?
       // ถ้าห้าม -> ก็ต้อง throw เหมือนกัน
       if (partialDef.localVars) {
         throw new Error(
-          `[SWD-ERR] @use "${cName}" has localVar, not allowed inside nested @query block.`
+          `[CSS-CTRL-ERR] @use "${cName}" has localVar, not allowed inside nested @query block.`
         );
       }
       mergeStyleDef(subDef, partialDef);
@@ -100,7 +100,7 @@ export function processClassBlocks(
 
     if (localClasses.has(clsName)) {
       throw new Error(
-        `[SWD-ERR] Duplicate class ".${clsName}" in scope "${scopeName}" (same file).`
+        `[CSS-CTRL-ERR] Duplicate class ".${clsName}" in scope "${scopeName}" (same file).`
       );
     }
     localClasses.add(clsName);
@@ -124,7 +124,7 @@ export function processClassBlocks(
     // (C) merge const ถ้ามี
     for (const cName of usedConstNames) {
       if (!constMap.has(cName)) {
-        throw new Error(`[SWD-ERR] @use refers to unknown const "${cName}".`);
+        throw new Error(`[CSS-CTRL-ERR] @use refers to unknown const "${cName}".`);
       }
       const partialDef = constMap.get(cName)!;
       mergeStyleDef(classStyleDef, partialDef);
@@ -143,7 +143,7 @@ export function processClassBlocks(
       for (const usedVar of (classStyleDef as any)._usedLocalVars) {
         if (!classStyleDef.localVars || !(usedVar in classStyleDef.localVars)) {
           throw new Error(
-            `[SWD-ERR] local var "${usedVar}" is used but not declared in ".${clsName}" (scope="${scopeName}").`
+            `[CSS-CTRL-ERR] local var "${usedVar}" is used but not declared in ".${clsName}" (scope="${scopeName}").`
           );
         }
       }
