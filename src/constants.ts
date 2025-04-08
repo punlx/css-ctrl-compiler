@@ -844,7 +844,28 @@ export const cssValues: Record<string, string[]> = {
    ********************************************/
   transform: [
     'none',
-    '<transform-function>', // เช่น "translate(10px, 20px) rotate(45deg)"
+    'matrix()',
+    'matrix3d()',
+    'translate()',
+    'translateX()',
+    'translateY()',
+    'translateZ()',
+    'translate3d()',
+    'scale()',
+    'scaleX()',
+    'scaleY()',
+    'scaleZ()',
+    'scale3d()',
+    'rotate()',
+    'rotateX()',
+    'rotateY()',
+    'rotateZ()',
+    'rotate3d()',
+    'skew()',
+    'skewX()',
+    'skewY()',
+    'perspective()',
+    '<transform-function>', // ตัวกำหนดเอง เช่น "translate(10px, 20px) rotate(45deg)"
   ],
   'transform-origin': [
     'center',
