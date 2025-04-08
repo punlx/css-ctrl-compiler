@@ -23,14 +23,34 @@ export interface IStyleDefinition {
   };
   rootVars?: Record<string, string>;
   localVars?: Record<string, string>;
-  queries?: IQueryBlock[];
+  queries?: IQueryBlock[]; // (ยังคงไว้ตามโค้ดเดิม - อาจไม่ได้ใช้แล้ว)
   hasRuntimeVar?: boolean;
+
+  // (NEW) เก็บโครงสร้าง Nested @query
+  nestedQueries?: INestedQueryNode[];
 }
+
+/**
+ * IQueryBlock - ของเดิม
+ * (อาจไม่ถูกใช้งานแล้ว แต่คงไว้เพื่อไม่ข้าม logic เดิม)
+ */
 export interface IQueryBlock {
   selector: string;
   styleDef: IStyleDefinition;
 }
 
+/** (NEW) สำหรับ Nested @query */
+export interface INestedQueryNode {
+  selector: string;
+  rawLines: string[];
+  children: INestedQueryNode[];
+
+  // เราอาจจะ parse แล้วใส่ styleDef ไว้ตรงนี้ก็ได้
+  // แต่ในตัวอย่างจะเก็บ styleDef ในขั้น process แล้วผูกใน object อื่น
+  // เลยยังไม่ได้ใส่ตรงนี้
+}
+
+/** directive */
 export interface IParsedDirective {
   name: string;
   value: string;

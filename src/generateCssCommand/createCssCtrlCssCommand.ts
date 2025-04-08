@@ -70,7 +70,9 @@ export function generateCssCtrlCssFromSource(sourceText: string): string {
     transformLocalVariables(styleDef, scopeName, className);
 
     // (F2) ถ้ามี query block => transform ด้วย
+    // @ts-ignore
     if (styleDef.queries && styleDef.queries.length > 0) {
+    // @ts-ignore
       for (const qb of styleDef.queries) {
         // copy localVars จาก parent ถ้าจำเป็น
         if (!qb.styleDef.localVars) {

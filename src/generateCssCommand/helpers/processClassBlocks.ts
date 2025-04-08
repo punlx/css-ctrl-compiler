@@ -2,14 +2,75 @@
 
 import { parseSingleAbbr } from '../parsers/parseSingleAbbr';
 import { IClassBlock, IStyleDefinition } from '../types';
-import { extractQueryBlocks } from '../utils/extractQueryBlocks';
 import { mergeStyleDef } from '../utils/mergeStyleDef';
 import { createEmptyStyleDef } from './createEmptyStyleDef';
 
-// (NEW) import makeFinalName สำหรับทำ hash / scope
-import { makeFinalName } from '../utils/sharedScopeUtils';
-// ^^^ ปรับเส้นทาง import ตามตำแหน่งจริงของไฟล์ sharedScopeUtils.ts
+import { parseNestedQueryBlocks } from '../utils/parseNestedQueryBlocks';
 
+// (ใหม่) import ฟังก์ชัน transformVariables & transformLocalVariables
+import { transFormVariables } from '../transformers/transformVariables';
+import { transformLocalVariables } from '../transformers/transformLocalVariables';
+
+// (ถ้าเคยมี scope hash)
+import { makeFinalName } from '../utils/sharedScopeUtils'; // หรือแก้ path ตามจริง
+
+// @ts-ignore
+function parseNestedQueryDef(
+  queries: any[],
+  parentDef: IStyleDefinition,
+  constMap: Map<string, IStyleDefinition>
+) {
+  const out = [];
+  for (const node of queries) {
+    // สร้าง styleDef ลูก
+    const subDef = createEmptyStyleDef();
+
+    // copy localVars จาก parent (ให้ลูกอ่านได้)
+    if (parentDef.localVars) {
+      subDef.localVars = { ...parentDef.localVars };
+    }
+
+    // แยก @use vs line ปกติ
+    const usedConstNames: string[] = [];
+    const normalLines: string[] = [];
+    for (const ln of node.rawLines) {
+      if (ln.startsWith('@use ')) {
+        usedConstNames.push(...ln.replace('@use', '').trim().split(/\s+/));
+      } else {
+        normalLines.push(ln);
+      }
+    }
+
+    // merge const
+    for (const cName of usedConstNames) {
+      if (!constMap.has(cName)) {
+        throw new Error(`[SWD-ERR] @use unknown const "${cName}" in nested @query.`);
+      }
+      const partialDef = constMap.get(cName)!;
+      mergeStyleDef(subDef, partialDef);
+    }
+
+    // parse normal lines => parseSingleAbbr
+    for (const ln of normalLines) {
+      parseSingleAbbr(ln, subDef);
+    }
+
+    // children -> recursive
+    // @ts-ignore
+    const childrenParsed = parseNestedQueryDef(node.children, subDef, constMap);
+
+    out.push({
+      selector: node.selector,
+      styleDef: subDef,
+      children: childrenParsed,
+    });
+  }
+  return out;
+}
+
+/**
+ * processClassBlocks - parse แต่ละคลาส => สร้าง styleDef => ใส่ลง map
+ */
 export function processClassBlocks(
   scopeName: string,
   classBlocks: IClassBlock[],
@@ -20,8 +81,6 @@ export function processClassBlocks(
 
   for (const block of classBlocks) {
     const clsName = block.className;
-
-    // ป้องกัน Duplicate class ซ้ำกันในไฟล์เดียวกัน
     if (localClasses.has(clsName)) {
       throw new Error(
         `[SWD-ERR] Duplicate class ".${clsName}" in scope "${scopeName}" (same file).`
@@ -29,103 +88,40 @@ export function processClassBlocks(
     }
     localClasses.add(clsName);
 
-    // สร้าง styleDef ว่าง
     const classStyleDef = createEmptyStyleDef();
 
-    // (A) แยก @query block
-    const { queries, newBody } = extractQueryBlocks(block.body);
-    const realQueryBlocks = queries.map((q) => ({
-      selector: q.selector,
-      styleDef: createEmptyStyleDef(),
-    }));
-    classStyleDef.queries = realQueryBlocks;
+    // 1) parse nested queries
+    const { lines, queries } = parseNestedQueryBlocks(block.body);
 
-    // (B) แยก @use กับ line ปกติ
-    const lines = newBody
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
-
+    // 2) แยก @use กับ line ปกติ
     let usedConstNames: string[] = [];
     const normalLines: string[] = [];
-
     for (const ln of lines) {
       if (ln.startsWith('@use ')) {
-        if (usedConstNames.length > 0) {
-          throw new Error(`[SWD-ERR] Multiple @use lines in ".${clsName}".`);
-        }
-        const tokens = ln.replace('@use', '').trim().split(/\s+/);
-        usedConstNames = tokens;
+        usedConstNames.push(...ln.replace('@use', '').trim().split(/\s+/));
       } else {
         normalLines.push(ln);
       }
     }
 
-    // (C) mergeConst ถ้ามี
-    if (usedConstNames.length > 0) {
-      for (const cName of usedConstNames) {
-        if (!constMap.has(cName)) {
-          throw new Error(`[SWD-ERR] @use refers to unknown const "${cName}".`);
-        }
-        const partialDef = constMap.get(cName)!;
-        mergeStyleDef(classStyleDef, partialDef);
+    // 3) mergeConst ถ้ามี
+    for (const cName of usedConstNames) {
+      if (!constMap.has(cName)) {
+        throw new Error(`[SWD-ERR] @use refers to unknown const "${cName}".`);
       }
+      const partialDef = constMap.get(cName)!;
+      mergeStyleDef(classStyleDef, partialDef);
     }
 
-    // (D) parse normal lines => parseSingleAbbr
+    // 4) parse normal lines => parseSingleAbbr
     for (const ln of normalLines) {
       parseSingleAbbr(ln, classStyleDef);
     }
 
-    // (E) parse lines ภายใน @query blocks
-    for (let i = 0; i < realQueryBlocks.length; i++) {
-      const qBlock = realQueryBlocks[i];
-      const qRawBody = queries[i].rawBody;
+    // 5) parse nested queries => ใส่ใน styleDef.nestedQueries
+    classStyleDef.nestedQueries = parseNestedQueryDef(queries, classStyleDef, constMap);
 
-      // copy localVars จาก parent
-      if (!qBlock.styleDef.localVars) {
-        qBlock.styleDef.localVars = {};
-      }
-      if (classStyleDef.localVars) {
-        Object.assign(qBlock.styleDef.localVars, classStyleDef.localVars);
-      }
-
-      const qLines = qRawBody
-        .split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean);
-
-      let usedConstNamesQ: string[] = [];
-      const normalQLines: string[] = [];
-
-      for (const qLn of qLines) {
-        if (qLn.startsWith('@use ')) {
-          usedConstNamesQ.push(...qLn.replace('@use', '').trim().split(/\s+/));
-        } else {
-          normalQLines.push(qLn);
-        }
-      }
-
-      for (const cName of usedConstNamesQ) {
-        if (!constMap.has(cName)) {
-          throw new Error(`[SWD-ERR] @use unknown const "${cName}" in @query block.`);
-        }
-        const partialDef = constMap.get(cName)!;
-        // ห้าม partialDef.hasRuntimeVar => throw ...
-        if (partialDef.hasRuntimeVar) {
-          throw new Error(
-            `[SWD-ERR] @use "${cName}" has $variable, not allowed inside @query block.`
-          );
-        }
-        mergeStyleDef(qBlock.styleDef, partialDef);
-      }
-
-      for (const qLn of normalQLines) {
-        parseSingleAbbr(qLn, qBlock.styleDef, false, true);
-      }
-    }
-
-    // (F) ตรวจว่าใช้ local var ก่อนประกาศหรือไม่
+    // 6) ตรวจว่าใช้ local var ก่อนประกาศหรือไม่ (เหมือนเดิม)
     if ((classStyleDef as any)._usedLocalVars) {
       for (const usedVar of (classStyleDef as any)._usedLocalVars) {
         if (!classStyleDef.localVars || !(usedVar in classStyleDef.localVars)) {
@@ -135,28 +131,35 @@ export function processClassBlocks(
         }
       }
     }
-    for (let i = 0; i < realQueryBlocks.length; i++) {
-      const qStyleDef = realQueryBlocks[i].styleDef;
-      if ((qStyleDef as any)._usedLocalVars) {
-        for (const usedVar of (qStyleDef as any)._usedLocalVars) {
-          if (!qStyleDef.localVars || !(usedVar in qStyleDef.localVars)) {
-            const sel = queries[i].selector;
-            throw new Error(
-              `[SWD-ERR] local var "${usedVar}" is used but not declared in query "${sel}" of ".${clsName}".`
-            );
-          }
-        }
-      }
-    }
 
-    // (G) ใช้ฟังก์ชันกลาง makeFinalName(...) แทน if-else
-    //     สมมติ block.body => ตัวช่วยคำนวณ hash
+    // 7) ทำชื่อ finalKey (กรณีถ้าอยาก hash)
     const finalKey = makeFinalName(scopeName, clsName, block.body);
+    // หรือถ้าไม่ใช้ hash => const finalKey = clsName;
+
+    // *** (สำคัญ) transform variable ให้ครบ (parent + child) ***
+    transFormVariables(classStyleDef, scopeName, clsName);
+    transformLocalVariables(classStyleDef, scopeName, clsName);
+    transformNestedQueriesRec(classStyleDef, scopeName, clsName);
 
     // เก็บลง map
-    // finalKey = ".box_abc123" หรือ "scope_box" ...
     result.set(finalKey, classStyleDef);
   }
 
   return result;
+}
+
+/**
+ * transformNestedQueriesRec - เดินลงไป transform styleDef ลูกทุกชั้น
+ */
+function transformNestedQueriesRec(def: IStyleDefinition, scopeName: string, className: string) {
+  if (!def.nestedQueries) return;
+  for (const node of def.nestedQueries) {
+    // @ts-ignore
+    const childDef = node.styleDef;
+    // transform
+    transFormVariables(childDef, scopeName, className);
+    transformLocalVariables(childDef, scopeName, className);
+    // แล้วลงลึก child
+    transformNestedQueriesRec(childDef, scopeName, className);
+  }
 }
