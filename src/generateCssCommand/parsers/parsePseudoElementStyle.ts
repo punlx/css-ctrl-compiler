@@ -76,7 +76,7 @@ export function parsePseudoElementStyle(
           const cProp = abbrMap[subAbbr as keyof typeof abbrMap];
           if (!cProp) {
             throw new Error(
-              `"${subAbbr}" not found in abbrMap (pseudo:${pseudoName}). (ty[${typKey}])`
+              `[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap (pseudo:${pseudoName}). (ty[${typKey}])`
             );
           }
           const finalVal = convertCSSVariable(subVal);

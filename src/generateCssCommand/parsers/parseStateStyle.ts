@@ -76,7 +76,7 @@ export function parseStateStyle(
           const cProp = abbrMap[subAbbr as keyof typeof abbrMap];
           if (!cProp) {
             throw new Error(
-              `"${subAbbr}" not found in abbrMap for state ${funcName} (ty[${typKey}]).`
+              `[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap for state ${funcName} (ty[${typKey}]).`
             );
           }
           const valFinal = convertCSSVariable(subVal);

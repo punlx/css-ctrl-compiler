@@ -49,7 +49,7 @@ export function parseBaseStyle(
     // (แก้ตรงนี้) ถ้า isQueryBlock == true => ห้ามประกาศ local var ใน @query
     if (isQueryBlock) {
       throw new Error(
-        `[CSS-CTRL-ERR] local var "${styleAbbr}" not allowed to declare in @query block. (abbrLine=${abbrLine})`
+        `[CSS-CTRL-ERR] local var "${styleAbbr}" not allowed to declare in @query block. (line: ${abbrLine})`
       );
     }
     if (isImportant) {
@@ -59,7 +59,7 @@ export function parseBaseStyle(
     const localVarName = styleAbbr.slice(3);
     if (!localVarName) {
       throw new Error(
-        `[CSS-CTRL-ERR] Missing local var name after "--&". Usage: "--&<name>[value]" (abbrLine=${abbrLine})`
+        `[CSS-CTRL-ERR] Missing local var name after "--&". Usage: "--&<name>[value]" (line: ${abbrLine})`
       );
     }
 
@@ -112,7 +112,7 @@ export function parseBaseStyle(
       const cssProp = abbrMap[abbr2 as keyof typeof abbrMap];
       if (!cssProp) {
         throw new Error(
-          `[CSS-CTRL-ERR] "${abbr2}" not defined in style abbreviation. (abbrLine=${abbrLine})`
+          `[CSS-CTRL-ERR] "${abbr2}" not defined in style abbreviation. (line: ${abbrLine})`
         );
       }
       const finalVal = convertCSSVariable(val2);
@@ -134,7 +134,7 @@ export function parseBaseStyle(
     const typKey = propValue.trim();
     if (!globalTypographyDict[typKey]) {
       throw new Error(
-        `[CSS-CTRL-ERR] Typography key "${typKey}" not found in theme.typography(...) (abbrLine=${abbrLine})`
+        `[CSS-CTRL-ERR] Typography key "${typKey}" not found in theme.typography(...) (line: ${abbrLine})`
       );
     }
     const tokens = globalTypographyDict[typKey].split(/\s+/);
@@ -168,7 +168,7 @@ export function parseBaseStyle(
       return;
     }
     throw new Error(
-      `"${styleAbbr}" not defined in style abbreviation or theme.define(...) (abbrLine=${abbrLine})`
+      `[CSS-CTRL-ERR] "${styleAbbr}" not defined in style abbreviation or theme.define(...) (line: ${abbrLine})`
     );
   }
 
@@ -183,7 +183,7 @@ export function parseBaseStyle(
     const cssProp = abbrMap[abbr2 as keyof typeof abbrMap];
     if (!cssProp) {
       throw new Error(
-        `[CSS-CTRL-ERR] "${abbr2}" not defined in style abbreviation. (abbrLine=${abbrLine})`
+        `[CSS-CTRL-ERR] "${abbr2}" not defined in style abbreviation. (line: ${abbrLine})`
       );
     }
 
