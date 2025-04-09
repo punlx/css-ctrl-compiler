@@ -25,62 +25,45 @@ function generateGeneric(sourceCode: string): string {
   // 3) ฟังก์ชัน parse $xxx[...] (รวม pseudo)
   // ---------------------------------------------------------------------------
   function parseStylesIntoSet(content: string, targetSet: Set<string>) {
-    // regex เดิมจับ pseudo function: hover(...), focus(...), ฯลฯ
     const pseudoFnRegex =
       /\b(hover|focus|active|focus-within|focus-visible|target|disabled|enabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid|before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|screen|container)\s*\(([^)]*)\)/g;
-
     let fnMatch: RegExpExecArray | null;
 
-    // -------------------------------------------------------------------------
-    // 3.1) วนหา pseudo function แต่ละตัวแล้ว parse ข้างใน (...)
-    // -------------------------------------------------------------------------
     while ((fnMatch = pseudoFnRegex.exec(content)) !== null) {
       const pseudoFn = fnMatch[1];
       const inside = fnMatch[2];
 
-      // *** ให้จับทั้ง `$xxx[...]` และ `--&xxx[...]` ***
+      // *** จับทั้ง `$xxx[...]` และ `--&xxx[...]` ***
       const styleMatches = [...inside.matchAll(/(\$[\w-]+|--&[\w-]+)\[/g)]
         .filter((m) => {
           const idx = m.index || 0;
           const matchText = m[1];
-          // ถ้าเป็น `$xxx` แต่ข้างหน้ามี `--` ให้ skip (logic เดิม)
+          // ถ้าเป็น `$xxx` แต่ข้างหน้ามี `--` ให้ skip
           if (matchText.startsWith('$') && idx >= 2 && inside.slice(idx - 2, idx) === '--') {
             return false;
           }
           return true;
         })
-        .map((m) => m[1]); // เอาเฉพาะ capture group
+        .map((m) => m[1]);
 
-      // แยกว่าเป็น `$xxx` หรือ `--&xxx`
       for (const styleName of styleMatches) {
         if (styleName.startsWith('$')) {
-          // เคสเดิม: ต่อ pseudoFn เข้าไป
           targetSet.add(`${styleName}-${pseudoFn}`);
         } else if (styleName.startsWith('--&')) {
-          // เคสใหม่: ให้ generate เป็น &xxx เท่านั้น ไม่มี pseudo suffix
           const localName = styleName.slice('--&'.length);
           targetSet.add(`&${localName}`);
         }
       }
     }
 
-    // -------------------------------------------------------------------------
-    // 3.2) ตัด pseudo function ออก (เพื่อ parse "direct usage" อีกรอบ)
-    // -------------------------------------------------------------------------
     const pseudoFnRegexForRemove =
       /\b(?:hover|focus|active|focus-within|focus-visible|target|disabled|enabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid|before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|screen|container)\s*\(([^)]*)\)/g;
-
     const contentWithoutFn = content.replace(pseudoFnRegexForRemove, '');
 
-    // -------------------------------------------------------------------------
-    // 3.3) parse "direct usage" (ไม่อยู่ใน pseudo function)
-    // -------------------------------------------------------------------------
     const directMatches = [...contentWithoutFn.matchAll(/(\$[\w-]+|--&[\w-]+)\[/g)]
       .filter((m) => {
         const idx = m.index || 0;
         const matchText = m[1];
-
-        // logic เดิม: ถ้าเป็น `$xxx[...]` แต่เกิดมาจาก `--$xxx[...]` ก็ skip
         if (
           matchText.startsWith('$') &&
           idx >= 2 &&
@@ -94,10 +77,8 @@ function generateGeneric(sourceCode: string): string {
 
     for (const styleName of directMatches) {
       if (styleName.startsWith('$')) {
-        // เป็น $xxx เฉย ๆ
         targetSet.add(styleName);
       } else if (styleName.startsWith('--&')) {
-        // ตัด '--&' ออก แล้วเก็บเป็น &xxx
         const localName = styleName.slice('--&'.length);
         targetSet.add(`&${localName}`);
       }
@@ -134,7 +115,7 @@ function generateGeneric(sourceCode: string): string {
         classMap[clsName] = new Set();
       }
 
-      // (A) ตรวจ @use ...
+      // (A) @use ...
       {
         const useRegex = /@use\s+([^\{\}\n]+)/g;
         let useMatch: RegExpExecArray | null;
@@ -271,7 +252,7 @@ function generateGeneric(sourceCode: string): string {
     formattedConstBlocks.push(temp);
   }
 
-  // 10.2) format .box {...} (normalLines) => เหมือนเดิม
+  // 10.2) format .class {...} (normalLines) => เหมือนเดิม
   const formattedBlockLines: string[] = [];
   for (const line of normalLines) {
     let modifiedLine = line.replace(/\.(\w+)(?:\([^)]*\))?\s*\{/, (_, cName) => `.${cName} {`);
@@ -318,128 +299,62 @@ function generateGeneric(sourceCode: string): string {
   const finalBlock = finalLines.join('\n');
 
   // ---------------------------------------------------------------------------
-  // 10.4) ฟอร์แมตรอบสอง (ของเดิม): แค่เลื่อน 1 tab ใต้ @query ... { }
+  // 10.4) เรียก "unifiedQueryIndent" => จัดการ @query + nested
   // ---------------------------------------------------------------------------
-  //  (ยังคงของเดิมเพื่อไม่ให้กระทบ logic stable)
-  const finalBlock2 = secondPassQueryIndent(finalBlock);
-
-  // ---------------------------------------------------------------------------
-  // 10.5) ฟอร์แมตรอบสาม (thirdPass) โฟกัสการ nested @query (หลายชั้น)
-  // ---------------------------------------------------------------------------
-  const finalBlock3 = thirdPassQueryIndent(finalBlock2);
+  const finalBlock2 = unifiedQueryIndent(finalBlock);
 
   // ---------------------------------------------------------------------------
   // 11) Replace ลงใน sourceCode
   // ---------------------------------------------------------------------------
-  const newStyledBlock = `${newPrefix}\`\n${finalBlock3}\n\``;
+  const newStyledBlock = `${newPrefix}\`\n${finalBlock2}\n\``;
   return sourceCode.replace(fullMatch, newStyledBlock);
 
   // ---------------------------------------------------------------------------
-  // ฟังก์ชันเดิม (second pass) => single-level indent ใต้ @query
+  // unifiedQueryIndent => จัดการ @query ใน pass เดียว (multi-level)
   // ---------------------------------------------------------------------------
-  function secondPassQueryIndent(code: string): string {
-    const lines = code.split('\n');
-    const newLines: string[] = [];
-    let insideQuery = false;
-
-    function addOneTab(line: string): string {
-      return indentUnit + line;
-    }
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-
-      // 1) ถ้าเจอ @query ... { => start insideQuery = true
-      if (/^\s*@query\b.*\{/.test(line)) {
-        newLines.push(line); // บรรทัดเปิด @query ไม่ขยับ
-        insideQuery = true;
-        continue;
-      }
-
-      // 2) ถ้าเจอ '}' แล้วกำลัง insideQuery => ถือเป็นปิด @query
-      if (trimmed === '}') {
-        if (insideQuery) {
-          newLines.push(addOneTab(line));
-          insideQuery = false;
-        } else {
-          newLines.push(line);
-        }
-        continue;
-      }
-
-      // 3) ถ้าอยู่ใน @query => บวก 1 tab
-      if (insideQuery) {
-        newLines.push(addOneTab(line));
-      } else {
-        newLines.push(line);
-      }
-    }
-    return newLines.join('\n');
-  }
-
-  // ---------------------------------------------------------------------------
-  // ฟังก์ชันใหม่ (third pass):
-  //   - จัด indent เพิ่มสำหรับกรณี nested @query ได้หลายชั้น
-  //   - ไม่เปลี่ยนบรรทัด/indent ส่วนอื่นที่ไม่ใช่ @query
-  // ---------------------------------------------------------------------------
-  function thirdPassQueryIndent(code: string): string {
+  function unifiedQueryIndent(code: string): string {
     const lines = code.split('\n');
     const newLines: string[] = [];
 
-    // stack สำหรับ track บล็อก @query
-    // queryDepth = จำนวน @query ที่ยังไม่ปิด (isQuery = true)
-    interface IStackItem {
-      isQuery: boolean;
-    }
-    const stack: IStackItem[] = [];
+    let depth = 0;
 
-    // ช่วยนับว่าบรรทัดหนึ่งมี '}' กี่ตัว
+    function countOpenBraces(line: string): number {
+      // /@query\b[^{}]*\{/g
+      const pattern = /@query\b[^{}]*\{/g;
+      return (line.match(pattern) || []).length;
+    }
     function countCloseBraces(line: string): number {
       return (line.match(/\}/g) || []).length;
-    }
-    // ช่วยนับว่าเจอ "@query ... {" กี่ครั้ง
-    // (ถ้าบรรทัดอาจมีหลาย @query ก็จับทั้งหมด)
-    function countQueryOpens(line: string): number {
-      const pattern = /@query\b[^{}]*\{/g;
-      let count = 0;
-      let m: RegExpExecArray | null;
-      while ((m = pattern.exec(line)) !== null) {
-        count++;
-      }
-      return count;
     }
 
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i];
 
-      // (A) pop stack ตามจำนวนปิด '}'
-      let closeCount = countCloseBraces(line);
-      while (closeCount > 0 && stack.length > 0) {
-        stack.pop();
-        closeCount--;
-      }
-
-      // (B) เช็กว่าเปิด @query กี่ครั้ง => push stack
-      let openCount = countQueryOpens(line);
-      for (let j = 0; j < openCount; j++) {
-        stack.push({ isQuery: true });
-      }
-
-      // (C) queryDepth = จำนวนทั้งหมดใน stack ที่ isQuery = true
-      const queryDepth = stack.filter((s) => s.isQuery).length;
-
-      // (D) เพิ่ม indent "extra" ทับจากของเดิม
-      //     1) หา indent เดิม
+      // 1) indent บรรทัดด้วย depth (ไม่มี pop/push ก่อน)
       const matchIndent = /^(\s*)/.exec(line);
       const oldIndent = matchIndent ? matchIndent[1] : '';
-      const content = line.slice(oldIndent.length); // ตัด indent เดิมออก
+      const content = line.slice(oldIndent.length);
 
-      //     2) คำนวณ indent ใหม่ = oldIndent + indentUnit * queryDepth
-      //        (ถ้าอยาก 2 เท่า: .repeat(queryDepth * 2) ก็ปรับได้)
-      const newIndent = indentUnit.repeat(queryDepth);
+      // ใช้ depth ปัจจุบัน indent
+      const newIndent = indentUnit.repeat(depth);
       line = oldIndent + newIndent + content;
 
+      // 2) ใส่ลง newLines
       newLines.push(line);
+
+      // 3) check ว่ามีเปิด '{' ไหม => depth++
+      let openCount = countOpenBraces(line);
+      while (openCount > 0) {
+        depth++;
+        openCount--;
+      }
+
+      // 4) check ว่ามีปิด '}' ไหม => depth-- “หลัง” indent
+      let closeCount = countCloseBraces(line);
+      while (closeCount > 0 && depth > 0) {
+        depth--;
+        closeCount--;
+      }
     }
 
     return newLines.join('\n');
@@ -461,9 +376,7 @@ export const generateGenericProvider = vscode.commands.registerCommand(
     if (!doc.fileName.endsWith('.ctrl.ts')) {
       return;
     }
-    
 
-    // เรียก getText + format
     const fullText = doc.getText();
     const newText = generateGeneric(fullText);
 
