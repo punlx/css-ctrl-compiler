@@ -43,6 +43,7 @@ export interface IQueryBlock {
 export interface INestedQueryNode {
   selector: string;
   rawLines: string[];
+  styleDef: IStyleDefinition;
   children: INestedQueryNode[];
 
   // เราอาจจะ parse แล้วใส่ styleDef ไว้ตรงนี้ก็ได้
