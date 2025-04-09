@@ -29,6 +29,7 @@ import {
   parseThemeDefineFull,
 } from './parseTheme';
 
+import { createQueryScopeSuggestionProvider } from './queryScopeSuggestionProvider';
 import { createCSSValueSuggestProvider } from './cssValueSuggestProvider';
 import { createReversePropertyProvider } from './reversePropertyProvider';
 import { updateDecorations } from './ghostTextDecorations';
@@ -121,6 +122,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const defineTopKeyProviderDisposable = createDefineTopKeyProvider(defineMap);
   const queryPseudoProvider = createQueryPseudoProvider();
   const scopeProvider = createScopeSuggestionProvider();
+  const queryScopeProvider = createQueryScopeSuggestionProvider();
 
   context.subscriptions.push(
     scopeProvider,
@@ -141,7 +143,8 @@ export async function activate(context: vscode.ExtensionContext) {
     commentModeSuggestionProvider,
     defineProviderDisposable,
     defineTopKeyProviderDisposable,
-    queryPseudoProvider
+    queryPseudoProvider,
+    queryScopeProvider
   );
 
   initSpacingMap(spacingDict);
