@@ -1,5 +1,3 @@
-// src/directiveProvider.ts
-
 import * as vscode from 'vscode';
 
 export function createDirectiveProvider() {
@@ -10,107 +8,131 @@ export function createDirectiveProvider() {
     ],
     {
       provideCompletionItems(document, position) {
-        // 1) เฉพาะไฟล์ .ctrl.ts
         if (!document.fileName.endsWith('.ctrl.ts')) {
           return;
         }
 
-        // 2) ข้อความก่อน cursor (เฉพาะบรรทัดนี้)
         const lineText = document.lineAt(position).text;
         const textBeforeCursor = lineText.substring(0, position.character);
 
-        // 3) เช็กว่าเพิ่งพิมพ์ "@" หรือไม่
+        // ต้องลงท้ายด้วย '@'
         if (!textBeforeCursor.endsWith('@')) {
           return;
         }
 
-        // 4) ตรวจว่า position ตอนนี้อยู่ใน block ของ .xxx { ... } หรือไม่
-        const isInsideClassBlock = checkIfInsideClassBlock(document, position);
-
-        // 5) สร้าง Completion Items ตามเงื่อนไข
-        const completions: vscode.CompletionItem[] = [];
-
-        if (isInsideClassBlock) {
-          // อยู่ใน .box { ... } => แสดงเฉพาะ "@use"
-          const useItem = new vscode.CompletionItem('use', vscode.CompletionItemKind.Keyword);
-          useItem.insertText = 'use';
-          useItem.detail = 'CSS-CTRL directive (@use) inside class';
-
-          const queryItem = new vscode.CompletionItem('query', vscode.CompletionItemKind.Keyword);
-          queryItem.insertText = 'query';
-          queryItem.detail = 'CSS-CTRL directive (@query) inside class';
-          completions.push(useItem, queryItem);
-        } else {
-          // อยู่นอกบล็อก => แสดง @scope, @bind, @const
-          const scopeItem = new vscode.CompletionItem('scope', vscode.CompletionItemKind.Keyword);
-          scopeItem.insertText = 'scope';
-          scopeItem.detail = 'CSS-CTRL Scope directive';
-          completions.push(scopeItem);
-
-          const bindItem = new vscode.CompletionItem('bind', vscode.CompletionItemKind.Keyword);
-          bindItem.insertText = 'bind';
-          bindItem.detail = 'CSS-CTRL Bind directive';
-          completions.push(bindItem);
-
-          const constItem = new vscode.CompletionItem('const', vscode.CompletionItemKind.Keyword);
-          constItem.insertText = 'const';
-          constItem.detail = 'CSS-CTRL Abbe Constant directive';
-          completions.push(constItem);
+        // (A) เคสพิเศษ: อยู่หลัง "@query" แต่ยังไม่เปิด '{'
+        if (isAfterQueryButNoBrace(document, position)) {
+          // => Suggest เฉพาะ "scope"
+          return [ makeItem('scope', 'CSS-CTRL directive @scope (after @query)') ];
         }
 
-        return completions;
+        // (B) ถ้าไม่เข้าเคสพิเศษ => ใช้ blockStack logic
+        const stack = findBlockStack(document, position);
+
+        if (stack.includes('const')) {
+          return undefined;
+        }
+        if (stack.includes('class')) {
+          return [
+            makeItem('use', 'CSS-CTRL directive @use (in class)'),
+            makeItem('query', 'CSS-CTRL directive @query (in class)'),
+          ];
+        }
+        if (stack.includes('query')) {
+          return [ makeItem('scope', 'CSS-CTRL directive @scope (in query)') ];
+        }
+
+        // default => top-level
+        return [
+          makeItem('scope', 'CSS-CTRL Scope directive'),
+          makeItem('bind', 'CSS-CTRL Bind directive'),
+          makeItem('const', 'CSS-CTRL Abbe Constant directive'),
+        ];
       },
     },
-    '@' // trigger character
+    '@'
   );
 }
 
-/**
- * ฟังก์ชันช่วย: ตรวจสอบว่า Cursor อยู่ภายใน .xxx { ... } หรือไม่
- * แนวทางง่าย ๆ: วิ่งตั้งแต่เริ่มไฟล์ถึงตำแหน่ง cursor แล้วนับเปิด-ปิดปีกกาที่ match กับ .xxx {
+function makeItem(name: string, detail: string): vscode.CompletionItem {
+  const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Event);
+  item.insertText = name;
+  item.detail = detail;
+  return item;
+}
+
+/** 
+ * isAfterQueryButNoBrace:
+ * เช็คว่าในบรรทัด (จนถึง cursor) มี "@query"
+ * แต่ยังไม่เจอ '{' และเจอ "@" ตรงปลาย => "กำลังจะพิมพ์ directive" 
  */
-function checkIfInsideClassBlock(
-  document: vscode.TextDocument,
-  position: vscode.Position
-): boolean {
-  const fullRange = new vscode.Range(new vscode.Position(0, 0), position);
-  const textUpToCursor = document.getText(fullRange);
+function isAfterQueryButNoBrace(document: vscode.TextDocument, position: vscode.Position): boolean {
+  const lineText = document.lineAt(position.line).text;
+  const textBefore = lineText.slice(0, position.character);
 
-  // เราเก็บเฉพาะ stack ของ class block เท่านั้น (.xxx {)
-  const classOpenRegex = /\.\w+\s*\{/g;
-  const blockRegex = /\{|\}/g;
-
-  let classOpenPositions: number[] = [];
-  let match;
-
-  // หาตำแหน่งที่เปิด class block
-  while ((match = classOpenRegex.exec(textUpToCursor)) !== null) {
-    classOpenPositions.push(match.index);
-  }
-
-  // ถ้าไม่มี class block เลย
-  if (classOpenPositions.length === 0) {
+  // cursor ลงท้ายด้วย '@' ?
+  if (!textBefore.endsWith('@')) {
     return false;
   }
 
-  // ใช้ stack ปกติสำหรับ { } แต่นับเฉพาะที่อยู่หลัง class เปิด
-  let stack = 0;
-  let lastClassOpenIndex = classOpenPositions[classOpenPositions.length - 1];
+  // เอาเนื้อหาทั้งหมดจนถึง cursor
+  const fullTextUpToCursor = document.getText(
+    new vscode.Range(new vscode.Position(0,0), position)
+  );
 
-  // slice เอาแค่ข้อความหลังจากเปิด .class { ล่าสุด
-  const afterClassText = textUpToCursor.slice(lastClassOpenIndex);
+  // (1) หา lastIndexOf('@query')
+  const idxQuery = fullTextUpToCursor.lastIndexOf('@query');
+  if (idxQuery === -1) {
+    return false; // ไม่มี @query
+    
+  }
 
-  // นับ {} ในช่วงหลังจาก .class {
-  while ((match = blockRegex.exec(afterClassText)) !== null) {
-    if (match[0] === '{') {
-      stack++;
-    } else if (match[0] === '}') {
-      stack--;
-      if (stack === 0) {
-        return false; // ปิดครบแล้ว
+  // (2) จาก idxQuery จนถึง cursor => มี '{' ไหม
+  const substringFromQuery = fullTextUpToCursor.slice(idxQuery, fullTextUpToCursor.length);
+  // ถ้ามี '{' => block เปิด => return false
+  if (substringFromQuery.includes('{')) {
+    return false;
+  }
+
+  // (3) ถ้าไม่มี '{' => block ยังไม่เปิด => Return true => Suggest scope
+  return true;
+}
+
+/**
+ * findBlockStack => (ของเดิม) parse open/close block
+ */
+function findBlockStack(document: vscode.TextDocument, position: vscode.Position): string[] {
+  const textUpToCursor = document.getText(
+    new vscode.Range(new vscode.Position(0, 0), position)
+  );
+
+  const tokens: { index: number; type: 'class'|'const'|'query'|'close' }[] = [];
+
+  scanRegex(/\.\w+\s*\{/g, 'class');
+  scanRegex(/@const\b[^\{]*\{/g, 'const');
+  scanRegex(/@query\b[^\{]*\{/g, 'query');
+  scanRegex(/\}/g, 'close');
+
+  tokens.sort((a,b)=> a.index - b.index);
+
+  const stack: string[] = [];
+  for (const tk of tokens) {
+    if (tk.type === 'close') {
+      if (stack.length>0) {
+        stack.pop();
       }
+    } else {
+      stack.push(tk.type);
     }
   }
 
-  return stack > 0; // ยังเปิดอยู่
+  return stack;
+
+  function scanRegex(re: RegExp, type: 'class'|'const'|'query'|'close') {
+    re.lastIndex = 0;
+    let m: RegExpExecArray|null;
+    while ((m = re.exec(textUpToCursor))!==null) {
+      tokens.push({ index: m.index, type });
+    }
+  }
 }
