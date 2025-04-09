@@ -318,11 +318,13 @@ function generateGeneric(sourceCode: string): string {
 
     let depth = 0;
 
-    function countOpenBraces(line: string): number {
-      // /@query\b[^{}]*\{/g
+    // นับ '@query ... {'
+    function countQueryOpens(line: string): number {
       const pattern = /@query\b[^{}]*\{/g;
       return (line.match(pattern) || []).length;
     }
+
+    // นับ '}'
     function countCloseBraces(line: string): number {
       return (line.match(/\}/g) || []).length;
     }
@@ -330,26 +332,50 @@ function generateGeneric(sourceCode: string): string {
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i];
 
-      // 1) indent บรรทัดด้วย depth (ไม่มี pop/push ก่อน)
+      // --------------------------------------------------
+      // (A) ถ้าบรรทัดนี้คือ @query ... { => ใส่บรรทัดว่างก่อน 1 บรรทัด
+      //     (กรณีที่บรรทัดก่อนหน้าใน newLines ยังไม่ว่าง)
+      // --------------------------------------------------
+      const trimmed = line.trim();
+      // เช็กง่าย ๆ ว่าเริ่มต้นด้วย @query...{ หรือไม่
+      // (หรือจะใช้ /^@query\b.*\{/ ก็ได้)
+      if (/^@query\b.*\{/.test(trimmed)) {
+        if (newLines.length > 0 && newLines[newLines.length - 1].trim() !== '') {
+          // push บรรทัดเปล่า (ไม่มี indent)
+          newLines.push('');
+        }
+      }
+
+      // --------------------------------------------------
+      // (B) indent บรรทัดด้วย depth ปัจจุบัน
+      //     (Pop after => ให้ '}' อยู่ระดับเดียวกับ content)
+      // --------------------------------------------------
+
+      // 1) สร้าง indent เดิม
       const matchIndent = /^(\s*)/.exec(line);
       const oldIndent = matchIndent ? matchIndent[1] : '';
+      // ตัด indent เดิมออก
       const content = line.slice(oldIndent.length);
 
-      // ใช้ depth ปัจจุบัน indent
+      // ใช้ depth เพื่อสร้าง indent ใหม่
       const newIndent = indentUnit.repeat(depth);
       line = oldIndent + newIndent + content;
 
-      // 2) ใส่ลง newLines
+      // ใส่ลง newLines
       newLines.push(line);
 
-      // 3) check ว่ามีเปิด '{' ไหม => depth++
-      let openCount = countOpenBraces(line);
+      // --------------------------------------------------
+      // (C) นับเปิด { => depth++
+      // --------------------------------------------------
+      let openCount = countQueryOpens(line);
       while (openCount > 0) {
         depth++;
         openCount--;
       }
 
-      // 4) check ว่ามีปิด '}' ไหม => depth-- “หลัง” indent
+      // --------------------------------------------------
+      // (D) นับปิด } => depth-- "หลัง" indent
+      // --------------------------------------------------
       let closeCount = countCloseBraces(line);
       while (closeCount > 0 && depth > 0) {
         depth--;
