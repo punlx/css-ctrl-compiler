@@ -60,6 +60,7 @@ export function parsePseudoElementStyle(
       }
 
       if (realAbbr === 'ty') {
+        // typography => เดิม
         const typKey = val2.trim();
         if (!globalTypographyDict[typKey]) {
           throw new Error(
@@ -80,30 +81,61 @@ export function parsePseudoElementStyle(
             );
           }
           const finalVal = convertCSSVariable(subVal);
-          result[cProp] = finalVal + (tkImp ? ' !important' : '');
+          if (typeof cProp === 'string') {
+            result[cProp] = finalVal + (tkImp ? ' !important' : '');
+          } else {
+            // ถ้า typography บังเอิญ map หลาย property => loop
+            for (const propName of cProp) {
+              result[propName] = finalVal + (tkImp ? ' !important' : '');
+            }
+          }
         }
         continue;
       }
 
-      const cProp = abbrMap[realAbbr as keyof typeof abbrMap];
-      if (!cProp) {
+      const def = abbrMap[realAbbr as keyof typeof abbrMap];
+      if (!def) {
         throw new Error(
           `[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap for pseudo-element ${pseudoName}.`
         );
       }
 
       const finalVal = convertCSSVariable(val2);
+
       if (isVariable) {
-        // varPseudos
+        // varPseudos => store runtime var => `var(--xxx-pseudoName)`
         styleDef.varPseudos[pseudoName]![realAbbr] = finalVal;
-        result[cProp] = `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
+
+        if (Array.isArray(def)) {
+          for (const propName of def) {
+            result[propName] = `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
+          }
+        } else {
+          result[def] = `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
+        }
       } else if (val2.includes('--&')) {
+        // local var usage
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;
         });
-        result[cProp] = replaced + (isImportant ? ' !important' : '');
+        const valWithBang = replaced + (isImportant ? ' !important' : '');
+        if (Array.isArray(def)) {
+          for (const propName of def) {
+            result[propName] = valWithBang;
+          }
+        } else {
+          result[def] = valWithBang;
+        }
       } else {
-        result[cProp] = finalVal + (isImportant ? ' !important' : '');
+        // normal
+        const valWithBang = finalVal + (isImportant ? ' !important' : '');
+        if (Array.isArray(def)) {
+          for (const propName of def) {
+            result[propName] = valWithBang;
+          }
+        } else {
+          result[def] = valWithBang;
+        }
       }
     }
   }

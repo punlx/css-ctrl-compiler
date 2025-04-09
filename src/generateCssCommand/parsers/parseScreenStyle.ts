@@ -102,22 +102,39 @@ export function parseScreenStyle(
             );
           }
           const finalVal = convertCSSVariable(subVal);
-          screenProps[cProp] = finalVal + (tkImp ? ' !important' : '');
+          if (Array.isArray(cProp)) {
+            for (const pr of cProp) {
+              screenProps[pr] = finalVal + (tkImp ? ' !important' : '');
+            }
+          } else {
+            screenProps[cProp] = finalVal + (tkImp ? ' !important' : '');
+          }
         }
         continue;
       }
 
-      const cProp = abbrMap[abbr2 as keyof typeof abbrMap];
-      if (!cProp) {
+      const def = abbrMap[abbr2 as keyof typeof abbrMap];
+      if (!def) {
         throw new Error(`[CSS-CTRL-ERR] "${abbr2}" not found in abbrMap (screen).`);
       }
+      let finalVal = convertCSSVariable(val2);
+
       if (val2.includes('--&')) {
-        const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
+        finalVal = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;
         });
-        screenProps[cProp] = replaced + (isImportant ? ' !important' : '');
+        finalVal += isImportant ? ' !important' : '';
       } else {
-        screenProps[cProp] = convertCSSVariable(val2) + (isImportant ? ' !important' : '');
+        finalVal += isImportant ? ' !important' : '';
+      }
+
+      // ถ้า def เป็น array => set หลาย property
+      if (Array.isArray(def)) {
+        for (const propName of def) {
+          screenProps[propName] = finalVal;
+        }
+      } else {
+        screenProps[def] = finalVal;
       }
     }
   }

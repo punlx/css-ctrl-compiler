@@ -80,31 +80,62 @@ export function parseStateStyle(
             );
           }
           const valFinal = convertCSSVariable(subVal);
-          result[cProp] = valFinal + (tkImp ? ' !important' : '');
+          result[typeof cProp === 'string' ? cProp : cProp[0]] =
+            valFinal + (tkImp ? ' !important' : '');
+          // หมายเหตุ: ถ้า typography แยก property ได้หลายตัว 
+          // อาจต้อง loop expand อีกเหมือนกัน -- แล้วแต่ logic
         }
         continue;
       }
 
-      const cProp = abbrMap[realAbbr as keyof typeof abbrMap];
-      if (!cProp) {
+      const def = abbrMap[realAbbr as keyof typeof abbrMap];
+      if (!def) {
         throw new Error(`[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap for state ${funcName}.`);
       }
 
       let finalVal = convertCSSVariable(val2);
+
       if (isVar) {
+        // สร้าง varStates => root var
         styleDef.varStates = styleDef.varStates || {};
         styleDef.varStates[funcName] = styleDef.varStates[funcName] || {};
         styleDef.varStates[funcName][realAbbr] = finalVal;
 
-        result[cProp] = `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
+        // สุดท้าย set property => var(--xxx-funcName)
+        // *** ถ้า def เป็น array => set หลาย property
+        if (Array.isArray(def)) {
+          for (const propName of def) {
+            result[propName] =
+              `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
+          }
+        } else {
+          result[def] =
+            `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
+        }
       } else if (val2.includes('--&')) {
-        // อย่าเช็กว่ามีใน localVars หรือไม่ -> ปล่อย
+        // local var usage
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;
         });
-        result[cProp] = replaced + (isImportant ? ' !important' : '');
+        const valWithBang = replaced + (isImportant ? ' !important' : '');
+        // *** ถ้า def เป็น array => set หลาย prop
+        if (Array.isArray(def)) {
+          for (const propName of def) {
+            result[propName] = valWithBang;
+          }
+        } else {
+          result[def] = valWithBang;
+        }
       } else {
-        result[cProp] = finalVal + (isImportant ? ' !important' : '');
+        // normal string
+        const valWithBang = finalVal + (isImportant ? ' !important' : '');
+        if (Array.isArray(def)) {
+          for (const propName of def) {
+            result[propName] = valWithBang;
+          }
+        } else {
+          result[def] = valWithBang;
+        }
       }
     }
   }

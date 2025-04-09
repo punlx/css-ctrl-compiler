@@ -46,7 +46,6 @@ export function parseBaseStyle(
         `[CSS-CTRL-ERR] Local var "${styleAbbr}" not allowed inside @const/theme.define block.`
       );
     }
-    // (แก้ตรงนี้) ถ้า isQueryBlock == true => ห้ามประกาศ local var ใน @query
     if (isQueryBlock) {
       throw new Error(
         `[CSS-CTRL-ERR] local var "${styleAbbr}" not allowed to declare in @query block. (line: ${abbrLine})`
@@ -63,7 +62,7 @@ export function parseBaseStyle(
       );
     }
 
-    // (NEW) เช็คว่าชื่อ var ซ้ำกับ abbrMap key หรือไม่
+    // เช็คว่าชื่อ var ซ้ำกับ abbrMap key หรือไม่
     if (localVarName in abbrMap) {
       throw new Error(
         `[CSS-CTRL-ERR] local varriable name "--&${localVarName}" conflicts with abbreviation of style "${localVarName}: ${abbrMap[localVarName]}". Please rename.`
@@ -109,20 +108,32 @@ export function parseBaseStyle(
         );
       }
 
-      const cssProp = abbrMap[abbr2 as keyof typeof abbrMap];
-      if (!cssProp) {
+      // ตรวจ lookup abbrMap
+      const def = abbrMap[abbr2 as keyof typeof abbrMap];
+      if (!def) {
         throw new Error(
           `[CSS-CTRL-ERR] "${abbr2}" not defined in style abbreviation. (line: ${abbrLine})`
         );
       }
       const finalVal = convertCSSVariable(val2);
 
+      // เก็บ varBase => สุดท้าย transformVariables จะสร้าง :root { --mx-box_AbCdE: finalVal }
       if (!styleDef.varBase) {
         styleDef.varBase = {};
       }
       styleDef.varBase[realAbbr] = finalVal;
 
-      styleDef.base[cssProp] = `var(--${realAbbr})${isImportant ? ' !important' : ''}`;
+      // ใส่ base prop => "var(--realAbbr)"
+      const varRef = `var(--${realAbbr})${isImportant ? ' !important' : ''}`;
+
+      // (NEW) ถ้า def เป็น array => set หลาย property
+      if (Array.isArray(def)) {
+        for (const propName of def) {
+          styleDef.base[propName] = varRef;
+        }
+      } else {
+        styleDef.base[def] = varRef;
+      }
     }
     return;
   }
@@ -180,8 +191,8 @@ export function parseBaseStyle(
     const [abbr2, val2] = separateStyleAndProperties(ex);
     if (!abbr2) continue;
 
-    const cssProp = abbrMap[abbr2 as keyof typeof abbrMap];
-    if (!cssProp) {
+    const def = abbrMap[abbr2 as keyof typeof abbrMap];
+    if (!def) {
       throw new Error(
         `[CSS-CTRL-ERR] "${abbr2}" not defined in style abbreviation. (line: ${abbrLine})`
       );
@@ -197,9 +208,18 @@ export function parseBaseStyle(
         (styleDef as any)._usedLocalVars.add(varName);
         return `LOCALVAR(${varName})`;
       });
-      styleDef.base[cssProp] = finalVal + (isImportant ? ' !important' : '');
+      finalVal += isImportant ? ' !important' : '';
     } else {
-      styleDef.base[cssProp] = finalVal + (isImportant ? ' !important' : '');
+      finalVal += isImportant ? ' !important' : '';
+    }
+
+    // (NEW) ถ้า def เป็น array => set หลาย property
+    if (Array.isArray(def)) {
+      for (const propName of def) {
+        styleDef.base[propName] = finalVal;
+      }
+    } else {
+      styleDef.base[def] = finalVal;
     }
   }
 }

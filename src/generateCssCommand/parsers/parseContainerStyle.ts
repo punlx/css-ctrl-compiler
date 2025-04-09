@@ -100,23 +100,40 @@ export function parseContainerStyle(
             );
           }
           let finalVal = convertCSSVariable(subVal);
-          containerProps[cProp2] = finalVal + (tkImp ? ' !important' : '');
+          finalVal += tkImp ? ' !important' : '';
+          if (Array.isArray(cProp2)) {
+            for (const pr of cProp2) {
+              containerProps[pr] = finalVal;
+            }
+          } else {
+            containerProps[cProp2] = finalVal;
+          }
         }
         continue;
       }
 
-      const cProp2 = abbrMap[abbr2 as keyof typeof abbrMap];
-      if (!cProp2) {
+      const def = abbrMap[abbr2 as keyof typeof abbrMap];
+      if (!def) {
         throw new Error(`[CSS-CTRL-ERR] "${abbr2}" not found in abbrMap (container).`);
       }
 
+      let finalVal = convertCSSVariable(val2);
       if (val2.includes('--&')) {
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;
         });
-        containerProps[cProp2] = replaced + (isImportant ? ' !important' : '');
+        finalVal = replaced + (isImportant ? ' !important' : '');
       } else {
-        containerProps[cProp2] = convertCSSVariable(val2) + (isImportant ? ' !important' : '');
+        finalVal += isImportant ? ' !important' : '';
+      }
+
+      // if array => loop
+      if (Array.isArray(def)) {
+        for (const propName of def) {
+          containerProps[propName] = finalVal;
+        }
+      } else {
+        containerProps[def] = finalVal;
       }
     }
   }
