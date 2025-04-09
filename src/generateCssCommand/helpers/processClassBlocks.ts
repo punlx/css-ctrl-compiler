@@ -1,5 +1,3 @@
-// src/generateCssCommand/helpers/processClassBlocks.ts
-
 import { parseSingleAbbr } from '../parsers/parseSingleAbbr';
 import { IClassBlock, IStyleDefinition } from '../types';
 import { mergeStyleDef } from '../utils/mergeStyleDef';
@@ -8,8 +6,7 @@ import { createEmptyStyleDef } from './createEmptyStyleDef';
 import { parseNestedQueryBlocks } from '../utils/parseNestedQueryBlocks';
 
 // (NEW) import transformVariables & transformLocalVariables
-// @ts-ignore
-import { transformVariables } from '../transformers/transFormVariables';
+import { transformVariables } from '../transformers/transformVariables';
 import { transformLocalVariables } from '../transformers/transformLocalVariables';
 
 // (ถ้าใช้ scope=hash => makeFinalName)
@@ -28,11 +25,6 @@ function parseNestedQueryDef(
   for (const node of queries) {
     // สร้าง styleDef ลูก
     const subDef = createEmptyStyleDef();
-
-    // (ลบออก) ไม่ copy localVars:
-    // if (parentDef.localVars) {
-    //   subDef.localVars = { ...parentDef.localVars };
-    // }
 
     // แยก @use vs line ปกติ
     const usedConstNames: string[] = [];
@@ -56,8 +48,7 @@ function parseNestedQueryDef(
           `[CSS-CTRL-ERR] @use "${cName}" has $variable, not allowed inside nested @query block.`
         );
       }
-      // TODO: ถ้า partialDef มี localVar => policy ว่ายังไง?
-      // ถ้าห้าม -> ก็ต้อง throw เหมือนกัน
+      // ถ้ามี localVar => policy ว่ายังไง?
       if (partialDef.localVars) {
         throw new Error(
           `[CSS-CTRL-ERR] @use "${cName}" has localVar, not allowed inside nested @query block.`
@@ -85,15 +76,23 @@ function parseNestedQueryDef(
 }
 
 /**
+ * (UPDATED)
  * processClassBlocks - parse .className { ... } => สร้าง styleDef => ใส่ลง map
+ * *** เพิ่มเติม: return ทั้ง Map<finalKey, styleDef> และ shortNameToFinal เพื่อรองรับ @scope.xxx
  */
 export function processClassBlocks(
   scopeName: string,
   classBlocks: IClassBlock[],
   constMap: Map<string, IStyleDefinition>
-): Map<string, IStyleDefinition> {
+): {
+  classMap: Map<string, IStyleDefinition>;
+  shortNameToFinal: Map<string, string>;
+} {
   const localClasses = new Set<string>();
-  const result = new Map<string, IStyleDefinition>();
+  const classMap = new Map<string, IStyleDefinition>();
+
+  // (NEW) เก็บ shortName => finalName
+  const shortNameToFinal = new Map<string, string>();
 
   for (const block of classBlocks) {
     const clsName = block.className;
@@ -138,7 +137,7 @@ export function processClassBlocks(
     // (E) parse nested queries => เก็บใน styleDef.nestedQueries
     classStyleDef.nestedQueries = parseNestedQueryDef(queries, classStyleDef, constMap);
 
-    // (F) เช็คว่าใช้ local var ก่อนประกาศหรือไม่
+    // (F) เช็ค local var
     if ((classStyleDef as any)._usedLocalVars) {
       for (const usedVar of (classStyleDef as any)._usedLocalVars) {
         if (!classStyleDef.localVars || !(usedVar in classStyleDef.localVars)) {
@@ -149,17 +148,19 @@ export function processClassBlocks(
       }
     }
 
-    // (G) ใช้ฟังก์ชันกลาง makeFinalName(...) แทน if-else
+    // (G) ทำ finalKey
     const finalKey = makeFinalName(scopeName, clsName, block.body);
 
-    // *** transform variable (เฉพาะ parent) ***
-    // เราไม่ลงไป transform childDef นะ
-    transformVariables(classStyleDef, scopeName, clsName);
-    transformLocalVariables(classStyleDef, scopeName, clsName);
+    // (NEW) transform variable (parent) แต่ใช้ finalKey แทน clsName
+    transformVariables(classStyleDef, finalKey);
+    transformLocalVariables(classStyleDef, finalKey);
 
-    // เก็บลง map
-    result.set(finalKey, classStyleDef);
+    // (NEW) เก็บ shortName -> finalKey
+    shortNameToFinal.set(clsName, finalKey);
+
+    // เก็บลง map: finalKey -> styleDef
+    classMap.set(finalKey, classStyleDef);
   }
 
-  return result;
+  return { classMap, shortNameToFinal };
 }

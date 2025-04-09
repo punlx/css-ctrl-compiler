@@ -1,5 +1,3 @@
-// src/generateCssCommand/utils/parseNestedQueryBlocks.ts
-
 import { INestedQueryNode } from '../types';
 
 /**
@@ -72,11 +70,23 @@ export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult
 
     const innerBody = body.slice(braceOpenIdx + 1, j).trim();
 
+    // (NEW) detect if selector starts with "@scope."
+    let nodeSelector = rawSelector;
+    if (nodeSelector.startsWith('@scope.')) {
+      const sub = nodeSelector.slice('@scope.'.length).trim();
+      if (!sub) {
+        throw new Error('[CSS-CTRL] missing className after @scope.');
+      }
+      // เก็บเป็น placeholder => "SCOPE_REF(...)"
+      // เช่น @scope.card2:hover .child => SCOPE_REF(card2:hover .child)
+      nodeSelector = `SCOPE_REF(${sub})`;
+    }
+
     // parse recursive ข้างใน
     const childResult = parseNestedQueryBlocks(innerBody);
 
     queries.push({
-      selector: rawSelector,
+      selector: nodeSelector,
       rawLines: childResult.lines,
       children: childResult.queries,
     });

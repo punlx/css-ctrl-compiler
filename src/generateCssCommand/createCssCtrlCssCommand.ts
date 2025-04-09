@@ -1,5 +1,3 @@
-// src/generateCssCommand/createCssCtrlCssCommand.ts
-
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -8,8 +6,7 @@ import { ensureScopeUnique } from './utils/ensureScopeUnique';
 import { parseDirectives } from './parsers/parseDirectives';
 import { processClassBlocks } from './helpers/processClassBlocks';
 import { handleBindDirectives } from './utils/handleBindDirectives';
-import { transformVariables } from './transformers/transFormVariables';
-import { transformLocalVariables } from './transformers/transformLocalVariables';
+// (REMOVED) No more direct transformVariables or transformLocalVariables here
 import { buildCssText } from './builders/buildCssText';
 import { IStyleDefinition } from './types';
 
@@ -21,12 +18,6 @@ export const globalDefineMap: Record<string, Record<string, IStyleDefinition>> =
 
 /************************************************************
  * ฟังก์ชันหลัก: generateCssCtrlCssFromSource
- * - parse directive (@scope, @bind, @const)
- * - processClassBlocks
- * - handle bind
- * - transform variables (main + query block)
- * - build CSS text
- * - return เป็น string CSS
  ************************************************************/
 export function generateCssCtrlCssFromSource(sourceText: string): string {
   // (A) parse directives
@@ -36,7 +27,6 @@ export function generateCssCtrlCssFromSource(sourceText: string): string {
   const scopeDir = directives.find((d) => d.name === 'scope');
   const scopeName = scopeDir?.value || 'none';
 
-  // กันซ้ำ scope (ถ้าต้องการ)
   ensureScopeUnique(scopeName);
 
   // (C) สร้าง constMap จาก @const
@@ -45,61 +35,23 @@ export function generateCssCtrlCssFromSource(sourceText: string): string {
     constMap.set(c.name, c.styleDef);
   }
 
-  // (D) parse .className blocks => Map<classDisplayKey, styleDef>
-  const classNameDefs = processClassBlocks(scopeName, classBlocks, constMap);
+  // (D) parse .className blocks => Map<classDisplayKey, styleDef> + shortName->final
+  const { classMap: classNameDefs, shortNameToFinal } = processClassBlocks(scopeName, classBlocks, constMap);
 
   // (E) handle @bind
   handleBindDirectives(scopeName, directives, classNameDefs);
 
-  // (F) วนสร้าง CSS
+  // (F) สร้าง CSS (ไม่ transform variables ซ้ำอีก เพราะเราทำแล้วใน processClassBlocks)
   let finalCss = '';
   for (const [displayKey, styleDef] of classNameDefs.entries()) {
-    // สมมติถ้า scopeName !== 'none'
-    //    displayKey อาจเป็น "app_box" หรือ "box_ab1XZ"
-    // ถ้า scopeName==='none' => displayKey="box" (เหมือน className เดิม)
-
-    // ตัด scopeName_ ออกจาก displayKey เพื่อให้เหลือ className จริง
-    // (สำหรับส่งเข้า transFormVariables(...) / transformLocalVariables(...))
-    let className = displayKey;
-    if (scopeName !== 'none' && displayKey.startsWith(scopeName + '_')) {
-      className = displayKey.slice(scopeName.length + 1);
-    }
-
-    // (F1) transform variable (parent)
-    transformVariables(styleDef, scopeName, className);
-    transformLocalVariables(styleDef, scopeName, className);
-
-    // (F2) ถ้ามี query block => transform ด้วย
-    // @ts-ignore
-    if (styleDef.queries && styleDef.queries.length > 0) {
-      // @ts-ignore
-      for (const qb of styleDef.queries) {
-        // copy localVars จาก parent ถ้าจำเป็น
-        if (!qb.styleDef.localVars) {
-          qb.styleDef.localVars = {};
-        }
-        if (styleDef.localVars) {
-          Object.assign(qb.styleDef.localVars, styleDef.localVars);
-        }
-
-        // transform query block
-        transformVariables(qb.styleDef, scopeName, className);
-        transformLocalVariables(qb.styleDef, scopeName, className);
-      }
-    }
-
-    // (F3) build CSS text
-    finalCss += buildCssText(displayKey, styleDef);
+    finalCss += buildCssText(displayKey, styleDef, shortNameToFinal, scopeName);
   }
 
   return finalCss;
 }
 
 /************************************************************
- * ฟังก์ชัน createCssCtrlCssFile(doc): แค่ตัวอย่างการใช้งาน
- * - แก้ import line
- * - generate CSS
- * - เขียนไฟล์ .ctrl.css
+ * createCssCtrlCssFile(doc): สร้างไฟล์ .ctrl.css + import
  ************************************************************/
 export async function createCssCtrlCssFile(doc: vscode.TextDocument) {
   // เช็คไฟล์ .ctrl.ts
@@ -147,7 +99,6 @@ export async function createCssCtrlCssFile(doc: vscode.TextDocument) {
   // (2) generate CSS
   let generatedCss: string;
   try {
-    // เรียกฟังก์ชัน generateCssCtrlCssFromSource (ด้านบน)
     generatedCss = generateCssCtrlCssFromSource(finalText.replace(importLine, ''));
   } catch (err) {
     vscode.window.showErrorMessage(`CSS-CTRL parse error: ${(err as Error).message}`);
