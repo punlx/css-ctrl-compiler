@@ -29,12 +29,16 @@ export function parseBaseStyle(
     return;
   }
 
+  // ถ้า abbrMap กับ globalDefineMap มีชื่อชนกัน => throw
   if (styleAbbr in abbrMap && styleAbbr in globalDefineMap) {
     throw new Error(
       `[CSS-CTRL-ERR] "${styleAbbr}" is defined in both abbrMap and theme.define(...) - name collision not allowed.`
     );
   }
 
+  // -----------------------------------------------------------------------
+  // (A) ประกาศ local var  --&xxx
+  // -----------------------------------------------------------------------
   if (styleAbbr.startsWith('--&')) {
     // ประกาศ local var
     if (isConstContext) {
@@ -59,6 +63,13 @@ export function parseBaseStyle(
       );
     }
 
+    // (NEW) เช็คว่าชื่อ var ซ้ำกับ abbrMap key หรือไม่
+    if (localVarName in abbrMap) {
+      throw new Error(
+        `[CSS-CTRL-ERR] local varriable name "--&${localVarName}" conflicts with abbreviation of style "${localVarName}: ${abbrMap[localVarName]}". Please rename.`
+      );
+    }
+
     if (!styleDef.localVars) {
       styleDef.localVars = {};
     }
@@ -71,9 +82,11 @@ export function parseBaseStyle(
     return;
   }
 
+  // -----------------------------------------------------------------------
+  // (B) ถ้าเป็น runtime var => $xxx
+  // -----------------------------------------------------------------------
   const isVariable = styleAbbr.startsWith('$');
   if (isVariable) {
-    // ถ้าอยู่ใน @query block => ห้าม
     if (isQueryBlock) {
       throw new Error(
         `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${abbrLine}"`
@@ -114,8 +127,10 @@ export function parseBaseStyle(
     return;
   }
 
+  // -----------------------------------------------------------------------
+  // (C) ถ้าเป็น "ty" => ใช้ typography
+  // -----------------------------------------------------------------------
   if (styleAbbr === 'ty') {
-    // ใช้ typography
     const typKey = propValue.trim();
     if (!globalTypographyDict[typKey]) {
       throw new Error(
@@ -129,6 +144,9 @@ export function parseBaseStyle(
     return;
   }
 
+  // -----------------------------------------------------------------------
+  // (D) ถ้าไม่เจอใน abbrMap => อาจเป็น define?
+  // -----------------------------------------------------------------------
   if (!(styleAbbr in abbrMap)) {
     // อาจเป็น define
     if (styleAbbr in globalDefineMap) {
@@ -154,7 +172,9 @@ export function parseBaseStyle(
     );
   }
 
-  // ถ้าอยู่ใน abbrMap
+  // -----------------------------------------------------------------------
+  // (E) ถ้าอยู่ใน abbrMap => parse expansions
+  // -----------------------------------------------------------------------
   const expansions = [`${styleAbbr}[${propValue}]`];
   for (const ex of expansions) {
     const [abbr2, val2] = separateStyleAndProperties(ex);
@@ -169,10 +189,10 @@ export function parseBaseStyle(
 
     let finalVal = convertCSSVariable(val2);
     if (val2.includes('--&')) {
+      // local var usage
       if (!(styleDef as any)._usedLocalVars) {
         (styleDef as any)._usedLocalVars = new Set<string>();
       }
-      // ดึงชื่อ localVar ใน val2
       finalVal = val2.replace(/--&([\w-]+)/g, (_, varName) => {
         (styleDef as any)._usedLocalVars.add(varName);
         return `LOCALVAR(${varName})`;
