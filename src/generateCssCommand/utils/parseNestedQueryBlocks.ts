@@ -50,28 +50,30 @@ export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult
       throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing "{" after @query.');
     }
 
-    const rawSelector = body.slice(startSelectorIdx, braceOpenIdx).trim();
+    let rawSelector = body.slice(startSelectorIdx, braceOpenIdx).trim();
     if (!rawSelector) {
-      // กรณี @query ตามด้วย { ... } แต่ไม่มี selector
       throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing selector after @query.');
     }
 
-    // (NEW) เช็คกรณี "@query @scope { ... }" แต่ไม่มี .className ต่อท้าย
-    if (rawSelector.startsWith('@scope') && !rawSelector.startsWith('@scope.')) {
-      // เช่น "@query @scope { ... }" ไม่มีชื่อต่อท้าย
-      throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing selector after @query.');
+    // (A) ตรวจจับเคส "@scope" เปล่าๆ  หรือ "@scope " (ไม่มีจุด)
+    // เช่น  "@query @scope { ... }"
+    // ถ้าเจอ => throw error
+    if (/@scope(\s|$|\{)/.test(rawSelector)) {
+      // regex ข้างบน match: "@scope" ตามด้วย space, จบสตริง, หรือ {
+      throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing className after "@scope."');
     }
 
-    let nodeSelector = rawSelector;
-    if (nodeSelector.startsWith('@scope.')) {
-      const sub = nodeSelector.slice('@scope.'.length).trim();
-      if (!sub) {
-        // เช่น "@query @scope."
-        throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing className after @scope.');
+    // (B) ใช้ regex แทนทุกตำแหน่งที่เป็น "@scope.<class>"
+    rawSelector = rawSelector.replace(
+      /@scope\.([\w-]+)/g,
+      (_m, className) => {
+        if (!className) {
+          // กรณี "@scope." แต่ไม่มี className
+          throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing className after @scope.');
+        }
+        return `SCOPE_REF(${className})`;
       }
-      // เก็บเป็น placeholder => "SCOPE_REF(...)"
-      nodeSelector = `SCOPE_REF(${sub})`;
-    }
+    );
 
     let braceCount = 1;
     let j = braceOpenIdx + 1;
@@ -85,12 +87,10 @@ export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult
     }
 
     const innerBody = body.slice(braceOpenIdx + 1, j).trim();
-
-    // parse recursive ข้างใน
     const childResult = parseNestedQueryBlocks(innerBody);
 
     queries.push({
-      selector: nodeSelector,
+      selector: rawSelector,
       rawLines: childResult.lines,
       children: childResult.queries,
     });
