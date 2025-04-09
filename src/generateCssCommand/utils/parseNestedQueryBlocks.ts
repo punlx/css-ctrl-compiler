@@ -1,9 +1,7 @@
+// src/generateCssCommand/utils/parseNestedQueryBlocks.ts
+
 import { INestedQueryNode } from '../types';
 
-/**
- * parseNestedQueryBlocks - หา @query <selector> { ... } ซ้อนกันหลายระดับ
- * return { lines (top-level), queries (array ของ node) }
- */
 interface IParsedNestedQueriesResult {
   lines: string[];
   queries: INestedQueryNode[];
@@ -54,7 +52,25 @@ export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult
 
     const rawSelector = body.slice(startSelectorIdx, braceOpenIdx).trim();
     if (!rawSelector) {
+      // กรณี @query ตามด้วย { ... } แต่ไม่มี selector
       throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing selector after @query.');
+    }
+
+    // (NEW) เช็คกรณี "@query @scope { ... }" แต่ไม่มี .className ต่อท้าย
+    if (rawSelector.startsWith('@scope') && !rawSelector.startsWith('@scope.')) {
+      // เช่น "@query @scope { ... }" ไม่มีชื่อต่อท้าย
+      throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing selector after @query.');
+    }
+
+    let nodeSelector = rawSelector;
+    if (nodeSelector.startsWith('@scope.')) {
+      const sub = nodeSelector.slice('@scope.'.length).trim();
+      if (!sub) {
+        // เช่น "@query @scope."
+        throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing className after @scope.');
+      }
+      // เก็บเป็น placeholder => "SCOPE_REF(...)"
+      nodeSelector = `SCOPE_REF(${sub})`;
     }
 
     let braceCount = 1;
@@ -69,18 +85,6 @@ export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult
     }
 
     const innerBody = body.slice(braceOpenIdx + 1, j).trim();
-
-    // (NEW) detect if selector starts with "@scope."
-    let nodeSelector = rawSelector;
-    if (nodeSelector.startsWith('@scope.')) {
-      const sub = nodeSelector.slice('@scope.'.length).trim();
-      if (!sub) {
-        throw new Error('[CSS-CTRL] missing className after @scope.');
-      }
-      // เก็บเป็น placeholder => "SCOPE_REF(...)"
-      // เช่น @scope.card2:hover .child => SCOPE_REF(card2:hover .child)
-      nodeSelector = `SCOPE_REF(${sub})`;
-    }
 
     // parse recursive ข้างใน
     const childResult = parseNestedQueryBlocks(innerBody);
