@@ -1,7 +1,9 @@
 // src/generateGenericProvider.ts
 
 import * as vscode from 'vscode';
+
 export const indentUnit = '  ';
+
 // generateGeneric.ts
 function generateGeneric(sourceCode: string): string {
   // ---------------------------------------------------------------------------
@@ -104,18 +106,40 @@ function generateGeneric(sourceCode: string): string {
   // ---------------------------------------------------------------------------
   // 5) Parse .className { ... } => เก็บลง classMap + merge @use
   // ---------------------------------------------------------------------------
+
   {
     const classRegex = /\.(\w+)(?:\([^)]*\))?\s*\{([^}]*)\}/g;
     let classMatch: RegExpExecArray | null;
     while ((classMatch = classRegex.exec(templateContent)) !== null) {
       const clsName = classMatch[1];
       const innerContent = classMatch[2];
-
+  
+      // --- (A) ดึง substring ของ “ทั้งบรรทัด”
+      const matchIndex = classMatch.index;
+  
+      let lineStart = templateContent.lastIndexOf('\n', matchIndex);
+      if (lineStart === -1) {
+        lineStart = 0;
+      }
+  
+      let lineEnd = templateContent.indexOf('\n', matchIndex);
+      if (lineEnd === -1) {
+        lineEnd = templateContent.length;
+      }
+  
+      const lineContent = templateContent.slice(lineStart, lineEnd);
+  
+      // --- (B) ถ้ามี @query -> skip
+      if (lineContent.includes('@query')) {
+        continue;
+      }
+  
+      // --- (C) ถ้าไม่ skip => เก็บใน classMap
       if (!classMap[clsName]) {
         classMap[clsName] = new Set();
       }
-
-      // (A) @use ...
+  
+      // (C1) @use ...
       {
         const useRegex = /@use\s+([^\{\}\n]+)/g;
         let useMatch: RegExpExecArray | null;
@@ -131,8 +155,8 @@ function generateGeneric(sourceCode: string): string {
           }
         }
       }
-
-      // (B) parse $xxx[...] + pseudo
+  
+      // (C2) parse $xxx[...] + pseudo
       parseStylesIntoSet(innerContent, classMap[clsName]);
     }
   }
@@ -233,7 +257,6 @@ function generateGeneric(sourceCode: string): string {
   // ---------------------------------------------------------------------------
   // 10) ฟอร์แมต (@const block + .box block + directive) ตาม logic เดิม
   // ---------------------------------------------------------------------------
-  // 10.1) format constBlocks
   const formattedConstBlocks: string[][] = [];
 
   for (const block of constBlocks) {
@@ -252,7 +275,6 @@ function generateGeneric(sourceCode: string): string {
     formattedConstBlocks.push(temp);
   }
 
-  // 10.2) format .class {...} (normalLines) => เหมือนเดิม
   const formattedBlockLines: string[] = [];
   for (const line of normalLines) {
     let modifiedLine = line.replace(/\.(\w+)(?:\([^)]*\))?\s*\{/, (_, cName) => `.${cName} {`);
@@ -269,9 +291,7 @@ function generateGeneric(sourceCode: string): string {
     }
   }
 
-  // 10.3) รวม directive + constBlocks + normal block
   const finalLines: string[] = [];
-
   // @scope
   for (const s of scopeLines) {
     finalLines.push(`${indentUnit}${s}`);
@@ -297,15 +317,8 @@ function generateGeneric(sourceCode: string): string {
   finalLines.push(...formattedBlockLines);
 
   const finalBlock = finalLines.join('\n');
-
-  // ---------------------------------------------------------------------------
-  // 10.4) เรียก "unifiedQueryIndent" => จัดการ @query + nested
-  // ---------------------------------------------------------------------------
   const finalBlock2 = unifiedQueryIndent(finalBlock);
 
-  // ---------------------------------------------------------------------------
-  // 11) Replace ลงใน sourceCode
-  // ---------------------------------------------------------------------------
   const newStyledBlock = `${newPrefix}\`\n${finalBlock2}\n\``;
   return sourceCode.replace(fullMatch, newStyledBlock);
 
@@ -318,13 +331,11 @@ function generateGeneric(sourceCode: string): string {
 
     let depth = 0;
 
-    // นับ '@query ... {'
     function countQueryOpens(line: string): number {
       const pattern = /@query\b[^{}]*\{/g;
       return (line.match(pattern) || []).length;
     }
 
-    // นับ '}'
     function countCloseBraces(line: string): number {
       return (line.match(/\}/g) || []).length;
     }
@@ -332,50 +343,28 @@ function generateGeneric(sourceCode: string): string {
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i];
 
-      // --------------------------------------------------
-      // (A) ถ้าบรรทัดนี้คือ @query ... { => ใส่บรรทัดว่างก่อน 1 บรรทัด
-      //     (กรณีที่บรรทัดก่อนหน้าใน newLines ยังไม่ว่าง)
-      // --------------------------------------------------
       const trimmed = line.trim();
-      // เช็กง่าย ๆ ว่าเริ่มต้นด้วย @query...{ หรือไม่
-      // (หรือจะใช้ /^@query\b.*\{/ ก็ได้)
       if (/^@query\b.*\{/.test(trimmed)) {
         if (newLines.length > 0 && newLines[newLines.length - 1].trim() !== '') {
-          // push บรรทัดเปล่า (ไม่มี indent)
           newLines.push('');
         }
       }
 
-      // --------------------------------------------------
-      // (B) indent บรรทัดด้วย depth ปัจจุบัน
-      //     (Pop after => ให้ '}' อยู่ระดับเดียวกับ content)
-      // --------------------------------------------------
-
-      // 1) สร้าง indent เดิม
       const matchIndent = /^(\s*)/.exec(line);
       const oldIndent = matchIndent ? matchIndent[1] : '';
-      // ตัด indent เดิมออก
       const content = line.slice(oldIndent.length);
 
-      // ใช้ depth เพื่อสร้าง indent ใหม่
       const newIndent = indentUnit.repeat(depth);
       line = oldIndent + newIndent + content;
 
-      // ใส่ลง newLines
       newLines.push(line);
 
-      // --------------------------------------------------
-      // (C) นับเปิด { => depth++
-      // --------------------------------------------------
       let openCount = countQueryOpens(line);
       while (openCount > 0) {
         depth++;
         openCount--;
       }
 
-      // --------------------------------------------------
-      // (D) นับปิด } => depth-- "หลัง" indent
-      // --------------------------------------------------
       let closeCount = countCloseBraces(line);
       while (closeCount > 0 && depth > 0) {
         depth--;
