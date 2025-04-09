@@ -1195,8 +1195,18 @@ export const colorAbbrSet = new Set([
   '-webkit-mask', // -webkit-mask
 ]);
 
-export const abbrMap: Record<string, string> = {
+export const abbrStyleMapName: Record<string, string> = {
   ...moreStyleForSuggestion,
+  /**
+   * Multiple Style
+   */
+  mx: 'margin-x',
+  my: 'margin-y',
+  px: 'padding-x',
+  py: 'padding-y',
+  sq: 'square',
+  'max-sq': 'max-square',
+  'min-sq': 'min-square',
   a: 'all',
   /********************************************
    * Alignment, Box, and Display

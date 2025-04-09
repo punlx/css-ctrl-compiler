@@ -1,6 +1,14 @@
 // src/generateCssCommand/constants/abbrMap.ts
 
-export const abbrMap = {
+export const abbrMap: Record<string, string | string[]> = {
+  // multiple style
+  mx: ['margin-left', 'margin-right'],
+  my: ['margin-top', 'margin-bottom'],
+  px: ['padding-left', 'padding-right'],
+  py: ['padding-top', 'padding-bottom'],
+  sq: ['width', 'height'],
+  'max-sq': ['max-width', 'max-height'],
+  'min-sq': ['min-width', 'min-height'],
   // All
   a: 'all',
   // Alignment, Box, Display
@@ -286,4 +294,4 @@ export const abbrMap = {
    ********************************************/
   iso: 'isolation',
   ct: 'content',
-} as const;
+};

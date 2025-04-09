@@ -1,7 +1,7 @@
 // src/ghostTextDecorations.ts
 
 import * as vscode from 'vscode';
-import { abbrMap } from './constants';
+import { abbrStyleMapName } from './constants';
 
 /**
  * ghostDecorationType:
@@ -46,8 +46,8 @@ export function updateDecorations(editor: vscode.TextEditor) {
       const startIndex = match.index; // ตำแหน่งภายในบรรทัด
 
       // เช็คว่ามีใน abbrMap หรือไม่
-      if (abbrMap[abbr]) {
-        const propFull = `:${abbrMap[abbr]}`; // เช่น 'background-color'
+      if (abbrStyleMapName[abbr]) {
+        const propFull = `:${abbrStyleMapName[abbr]}`; // เช่น 'background-color'
 
         // เราอยากให้ ghost text ปรากฏ "ต่อท้าย" abbr => ตำแหน่ง = abbr.length
         // lineIndex = บรรทัด, column = startIndex + abbr.length

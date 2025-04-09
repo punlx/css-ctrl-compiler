@@ -1,6 +1,6 @@
 // src/generateCssCommand/parsers/parseContainerStyle.ts
 
-import { abbrMap } from '../../constants';
+import { abbrMap } from '../constants/abbrMap';
 import { globalBreakpointDict, globalTypographyDict } from '../../extension';
 import { convertCSSVariable } from '../helpers/convertCSSVariable';
 import { detectImportantSuffix } from '../helpers/detectImportantSuffix';

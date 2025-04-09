@@ -1,7 +1,7 @@
 // src/reversePropertyProvider.ts
 
 import * as vscode from 'vscode';
-import { abbrMap } from './constants';
+import { abbrStyleMapName } from './constants';
 
 /**
  * สร้าง reverseMap จาก 'background-color' => 'bg', 'border' => 'bd', ฯลฯ
@@ -9,8 +9,8 @@ import { abbrMap } from './constants';
  */
 const reverseMap: Record<string, string> = {};
 (function buildReverseMap() {
-  for (const abbr in abbrMap) {
-    const propName = abbrMap[abbr];
+  for (const abbr in abbrStyleMapName) {
+    const propName = abbrStyleMapName[abbr];
     reverseMap[propName] = abbr;
   }
 })();
