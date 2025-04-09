@@ -1,45 +1,35 @@
-// src/generateCssCommand/transformers/transFormVariables.ts
-
 import { IStyleDefinition } from '../types';
 
-export function transFormVariables(
+export function transformVariables(
   styleDef: IStyleDefinition,
-  scopeName: string,
-  className: string
+  displayName: string // e.g. "box_AbCdE" or "app_card"
 ): void {
-  // (1) เช็คถ้า scopeName === 'hash' => ปฏิบัติแบบเดียวกับ 'none'
-  const isHashScope = scopeName === 'hash';
-  const scopePart = scopeName === 'none' || isHashScope ? className : `${scopeName}_${className}`;
-
-  // -----------------------------
   // Base variables (varBase)
-  // -----------------------------
   if (styleDef.varBase) {
     for (const varName in styleDef.varBase) {
       const rawValue = styleDef.varBase[varName];
-      const finalVarName = `--${varName}-${scopePart}`;
+      // final var name => --varName-displayName
+      const finalVarName = `--${varName}-${displayName}`;
 
       styleDef.rootVars = styleDef.rootVars || {};
       styleDef.rootVars[finalVarName] = rawValue;
 
       for (const cssProp in styleDef.base) {
-        styleDef.base[cssProp] = styleDef.base[cssProp].replace(
-          `var(--${varName})`,
-          `var(${finalVarName})`
-        );
+        // replace var(--varName) => var(--varName-displayName)
+        const pattern = `var(--${varName})`;
+        styleDef.base[cssProp] = styleDef.base[cssProp].replace(pattern, `var(${finalVarName})`);
       }
     }
   }
 
-  // -----------------------------
   // State variables (varStates)
-  // -----------------------------
   if (styleDef.varStates) {
     for (const stName in styleDef.varStates) {
       const varsOfThatState: Record<string, string> = styleDef.varStates[stName] || {};
       for (const varName in varsOfThatState) {
         const rawValue = varsOfThatState[varName];
-        const finalVarName = `--${varName}-${scopePart}-${stName}`;
+        // final var name => --varName-displayName-stName
+        const finalVarName = `--${varName}-${displayName}-${stName}`;
 
         styleDef.rootVars = styleDef.rootVars || {};
         styleDef.rootVars[finalVarName] = rawValue;
@@ -47,25 +37,22 @@ export function transFormVariables(
         const stateProps = styleDef.states[stName];
         if (stateProps) {
           for (const cssProp in stateProps) {
-            stateProps[cssProp] = stateProps[cssProp].replace(
-              `var(--${varName}-${stName})`,
-              `var(${finalVarName})`
-            );
+            const pat = `var(--${varName}-${stName})`;
+            stateProps[cssProp] = stateProps[cssProp].replace(pat, `var(${finalVarName})`);
           }
         }
       }
     }
   }
 
-  // -----------------------------
   // Pseudo variables (varPseudos)
-  // -----------------------------
   if (styleDef.varPseudos) {
     for (const pseudoName in styleDef.varPseudos) {
       const pseudoVars: Record<string, string> = styleDef.varPseudos[pseudoName] || {};
       for (const varName in pseudoVars) {
         const rawValue = pseudoVars[varName];
-        const finalVarName = `--${varName}-${scopePart}-${pseudoName}`;
+        // final var => --varName-displayName-pseudoName
+        const finalVarName = `--${varName}-${displayName}-${pseudoName}`;
 
         styleDef.rootVars = styleDef.rootVars || {};
         styleDef.rootVars[finalVarName] = rawValue;
@@ -73,10 +60,8 @@ export function transFormVariables(
         const pseudoProps = styleDef.pseudos[pseudoName];
         if (pseudoProps) {
           for (const cssProp in pseudoProps) {
-            pseudoProps[cssProp] = pseudoProps[cssProp].replace(
-              `var(--${varName}-${pseudoName})`,
-              `var(${finalVarName})`
-            );
+            const pat = `var(--${varName}-${pseudoName})`;
+            pseudoProps[cssProp] = pseudoProps[cssProp].replace(pat, `var(${finalVarName})`);
           }
         }
       }

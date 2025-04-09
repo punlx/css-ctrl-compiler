@@ -49,7 +49,7 @@
         },
         {
           "name": "entity.other.attribute-name.class.css",
-          "match": "(?<=@query\\s)(.*?)(?=\\s*\\{)"
+          "match": "(?<=@query\\s@scope\\.)(.*?)(?=\\s*\\{)"
         },
         {
           "name": "variable.other.constant.object.ts",

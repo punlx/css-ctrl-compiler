@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
  * createBindClassProvider:
  * - Trigger: เมื่อผู้ใช้พิมพ์ '.' ในไฟล์ .ctrl.ts
  * - เช็คว่าบรรทัดนั้นมี '@bind' ไหม
- * - หารายชื่อคลาสทั้งหมดในไฟล์ (via getAllClasses)
+ * - หารายชื่อคลาสทั้งหมดในไฟล์ (via getAllClasses) -- ข้าม class ที่อยู่ในบรรทัด @query
  * - หาคลาสที่บรรทัดนั้นใช้ไปแล้ว (via getUsedClassesInLine)
  * - Suggest เฉพาะคลาสที่ยังไม่ถูกใช้ในบรรทัดนั้น
  */
@@ -50,9 +50,7 @@ export function createBindClassProvider() {
         const completions: vscode.CompletionItem[] = [];
         for (const cls of availableClasses) {
           const item = new vscode.CompletionItem(cls, vscode.CompletionItemKind.Class);
-          // Insert เป็น "box1" หรือ "box2" ไม่ต้องใส่จุดนำหน้า เพราะ user พิมพ์ไปแล้ว
-          item.insertText = cls;
-          // อาจกำหนด detail / documentation เพิ่มได้
+          item.insertText = cls; // user พิมพ์ '.' ไปแล้ว
           completions.push(item);
         }
 
@@ -66,17 +64,37 @@ export function createBindClassProvider() {
 /**
  * getAllClasses:
  * สแกนทั้งไฟล์ document => หา .className { ... }
- * คืนเป็น array ของชื่อคลาส (เช่น ["box1","box2","box3"])
+ * ข้าม class ถ้าบรรทัดประกาศนั้นมี "@query"
  */
 function getAllClasses(document: vscode.TextDocument): string[] {
   const text = document.getText();
   const classSet = new Set<string>();
 
-  // จับ .box1 { หรือ .box-anything {
+  // จับ .className {
   const regex = /\.([\w-]+)\s*\{/g;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(text)) !== null) {
-    classSet.add(match[1]);
+    const clsName = match[1];
+
+    // --- ค้นหาบรรทัดปัจจุบัน
+    const matchIndex = match.index;
+    let lineStart = text.lastIndexOf('\n', matchIndex);
+    if (lineStart === -1) {
+      lineStart = 0;
+    }
+    let lineEnd = text.indexOf('\n', matchIndex);
+    if (lineEnd === -1) {
+      lineEnd = text.length;
+    }
+
+    const lineContent = text.slice(lineStart, lineEnd);
+
+    // --- ถ้าบรรทัดมี @query => skip
+    if (lineContent.includes('@query')) {
+      continue;
+    }
+
+    classSet.add(clsName);
   }
 
   return Array.from(classSet);

@@ -1,7 +1,7 @@
 // src/cssValueSuggestProvider.ts
 
 import * as vscode from 'vscode';
-import { abbrMap, cssValues, namedColorHex } from './constants';
+import { abbrStyleMapName, cssValues, namedColorHex } from './constants';
 
 /**
  * createCSSValueSuggestProvider:
@@ -30,7 +30,7 @@ export function createCSSValueSuggestProvider() {
 
         const ab = match[1];
         // 4) แปลงเป็น property
-        const cssProp = abbrMap[ab];
+        const cssProp = abbrStyleMapName[ab];
         if (!cssProp) return;
 
         // 5) เอาค่าปกติจาก cssValues

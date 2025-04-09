@@ -1,7 +1,7 @@
 // src/typographyProvider.ts
 
 import * as vscode from 'vscode';
-import { abbrMap } from './constants';
+import { abbrMap } from './generateCssCommand/constants/abbrMap';
 
 /**
  * createFontProvider:

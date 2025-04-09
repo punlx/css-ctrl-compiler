@@ -1,6 +1,6 @@
 // src/generateCssCommand/parsers/parseStateStyle.ts
 
-import { abbrMap } from '../../constants';
+import { abbrMap } from '../constants/abbrMap';
 import { globalTypographyDict } from '../../extension';
 import { convertCSSVariable } from '../helpers/convertCSSVariable';
 import { detectImportantSuffix } from '../helpers/detectImportantSuffix';
@@ -10,7 +10,8 @@ import { IStyleDefinition } from '../types';
 export function parseStateStyle(
   abbrLine: string,
   styleDef: IStyleDefinition,
-  isConstContext: boolean = false
+  isConstContext: boolean = false,
+  isQueryBlock: boolean = false
 ) {
   const openParenIdx = abbrLine.indexOf('(');
   const funcName = abbrLine.slice(0, openParenIdx).trim();
@@ -30,22 +31,17 @@ export function parseStateStyle(
     const [abbr, val] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
 
-    if (abbr.includes('--&')) {
-      const localVarMatches = abbr.match(/--&([\w-]+)/g) || [];
-      for (const matchVar of localVarMatches) {
-        const localVarName = matchVar.replace('--&', '');
-        if (!styleDef.localVars?.[localVarName]) {
-          throw new Error(
-            `[CSS-CTRL-ERR] Using local var "${matchVar}" in state "${funcName}" before it is declared in base.`
-          );
-        }
-      }
-    }
-
     const expansions = [`${abbr}[${val}]`];
     for (const ex of expansions) {
       const [abbr2, val2] = separateStyleAndProperties(ex);
       if (!abbr2) continue;
+
+      // ถ้า isQueryBlock && abbr2.startsWith('$') => throw
+      if (isQueryBlock && abbr2.startsWith('$')) {
+        throw new Error(
+          `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${ex}"`
+        );
+      }
 
       if (abbr2.startsWith('--&') && isImportant) {
         throw new Error(
@@ -53,28 +49,16 @@ export function parseStateStyle(
         );
       }
 
-      if (val2.includes('--&')) {
-        const usedLocalVars = val2.match(/--&([\w-]+)/g) || [];
-        for (const usage of usedLocalVars) {
-          const localVarName = usage.replace('--&', '');
-          if (!styleDef.localVars?.[localVarName]) {
-            throw new Error(
-              `[CSS-CTRL-ERR] Using local var "${usage}" in state "${funcName}" before it is declared in base.`
-            );
-          }
-        }
-      }
-
       const isVar = abbr2.startsWith('$');
       const realAbbr = isVar ? abbr2.slice(1) : abbr2;
+
       if (isVar && realAbbr === 'ty') {
         throw new Error(
           `[CSS-CTRL-ERR] "$ty[...]": cannot use runtime variable to reference typography.`
         );
       }
-      // -------------------------------------------
-      // (NEW) TODO ใช้ typography ใน state (hover/focus/...)
-      // -------------------------------------------
+
+      // ถ้า realAbbr === 'ty' => parse typography (เดิม)
       if (realAbbr === 'ty') {
         const typKey = val2.trim();
         if (!globalTypographyDict[typKey]) {
@@ -92,34 +76,66 @@ export function parseStateStyle(
           const cProp = abbrMap[subAbbr as keyof typeof abbrMap];
           if (!cProp) {
             throw new Error(
-              `"${subAbbr}" not found in abbrMap for state ${funcName} (ty[${typKey}]).`
+              `[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap for state ${funcName} (ty[${typKey}]).`
             );
           }
           const valFinal = convertCSSVariable(subVal);
-          result[cProp] = valFinal + (tkImp ? ' !important' : '');
+          result[typeof cProp === 'string' ? cProp : cProp[0]] =
+            valFinal + (tkImp ? ' !important' : '');
+          // หมายเหตุ: ถ้า typography แยก property ได้หลายตัว 
+          // อาจต้อง loop expand อีกเหมือนกัน -- แล้วแต่ logic
         }
         continue;
       }
 
-      const cProp = abbrMap[realAbbr as keyof typeof abbrMap];
-      if (!cProp) {
+      const def = abbrMap[realAbbr as keyof typeof abbrMap];
+      if (!def) {
         throw new Error(`[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap for state ${funcName}.`);
       }
 
       let finalVal = convertCSSVariable(val2);
+
       if (isVar) {
+        // สร้าง varStates => root var
         styleDef.varStates = styleDef.varStates || {};
         styleDef.varStates[funcName] = styleDef.varStates[funcName] || {};
         styleDef.varStates[funcName][realAbbr] = finalVal;
 
-        result[cProp] = `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
+        // สุดท้าย set property => var(--xxx-funcName)
+        // *** ถ้า def เป็น array => set หลาย property
+        if (Array.isArray(def)) {
+          for (const propName of def) {
+            result[propName] =
+              `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
+          }
+        } else {
+          result[def] =
+            `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
+        }
       } else if (val2.includes('--&')) {
+        // local var usage
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;
         });
-        result[cProp] = replaced + (isImportant ? ' !important' : '');
+        const valWithBang = replaced + (isImportant ? ' !important' : '');
+        // *** ถ้า def เป็น array => set หลาย prop
+        if (Array.isArray(def)) {
+          for (const propName of def) {
+            result[propName] = valWithBang;
+          }
+        } else {
+          result[def] = valWithBang;
+        }
       } else {
-        result[cProp] = finalVal + (isImportant ? ' !important' : '');
+        // normal string
+        const valWithBang = finalVal + (isImportant ? ' !important' : '');
+        if (Array.isArray(def)) {
+          for (const propName of def) {
+            result[propName] = valWithBang;
+          }
+        } else {
+          result[def] = valWithBang;
+        }
       }
     }
   }

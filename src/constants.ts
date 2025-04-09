@@ -113,7 +113,7 @@ export const cssValues: Record<string, string[]> = {
   /********************************************
    * Background
    ********************************************/
-  'background-color': ['<color>', 'transparent', 'currentcolor', 'inherit', 'initial', 'unset'],
+  'background-color': ['<color>', 'transparent', 'currentColor', 'inherit', 'initial', 'unset'],
   'background-position': [
     'left top',
     'left center',
@@ -315,7 +315,7 @@ export const cssValues: Record<string, string[]> = {
   /********************************************
    * Color, Cursor
    ********************************************/
-  color: ['<color>', 'currentcolor', 'inherit', 'initial', 'unset'],
+  color: ['<color>', 'currentColor', 'inherit', 'initial', 'unset'],
   cursor: [
     'auto',
     'default',
@@ -844,7 +844,28 @@ export const cssValues: Record<string, string[]> = {
    ********************************************/
   transform: [
     'none',
-    '<transform-function>', // เช่น "translate(10px, 20px) rotate(45deg)"
+    'matrix()',
+    'matrix3d()',
+    'translate()',
+    'translateX()',
+    'translateY()',
+    'translateZ()',
+    'translate3d()',
+    'scale()',
+    'scaleX()',
+    'scaleY()',
+    'scaleZ()',
+    'scale3d()',
+    'rotate()',
+    'rotateX()',
+    'rotateY()',
+    'rotateZ()',
+    'rotate3d()',
+    'skew()',
+    'skewX()',
+    'skewY()',
+    'perspective()',
+    '<transform-function>', // ตัวกำหนดเอง เช่น "translate(10px, 20px) rotate(45deg)"
   ],
   'transform-origin': [
     'center',
@@ -1174,8 +1195,18 @@ export const colorAbbrSet = new Set([
   '-webkit-mask', // -webkit-mask
 ]);
 
-export const abbrMap: Record<string, string> = {
+export const abbrStyleMapName: Record<string, string> = {
   ...moreStyleForSuggestion,
+  /**
+   * Multiple Style
+   */
+  mx: 'margin-x',
+  my: 'margin-y',
+  px: 'padding-x',
+  py: 'padding-y',
+  sq: 'square',
+  'max-sq': 'max-square',
+  'min-sq': 'min-square',
   a: 'all',
   /********************************************
    * Alignment, Box, and Display

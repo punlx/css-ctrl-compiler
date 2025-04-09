@@ -64,7 +64,7 @@ export function parseDirectives(text: string): {
         const scopeNameRegex = /^[a-zA-Z0-9_-]+$/;
         if (!scopeNameRegex.test(dirValue)) {
           throw new Error(
-            `[SWD-ERR] scope name must contain only letters, digits, underscore, or dash. Got: "${dirValue}"`
+            `[CSS-CTRL-ERR] scope name must contain only letters, digits, underscore, or dash. Got: "${dirValue}"`
           );
         }
       }

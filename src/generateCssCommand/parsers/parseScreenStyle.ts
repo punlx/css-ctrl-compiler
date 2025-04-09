@@ -1,6 +1,6 @@
 // src/generateCssCommand/parsers/parseScreenStyle.ts
 
-import { abbrMap } from '../../constants';
+import { abbrMap } from '../constants/abbrMap';
 import { globalBreakpointDict, globalTypographyDict } from '../../extension';
 import { convertCSSVariable } from '../helpers/convertCSSVariable';
 import { detectImportantSuffix } from '../helpers/detectImportantSuffix';
@@ -10,7 +10,8 @@ import { IStyleDefinition } from '../types';
 export function parseScreenStyle(
   abbrLine: string,
   styleDef: IStyleDefinition,
-  isConstContext: boolean = false
+  isConstContext: boolean = false,
+  isQueryBlock: boolean = false
 ) {
   const openParenIdx = abbrLine.indexOf('(');
   let inside = abbrLine.slice(openParenIdx + 1, -1).trim();
@@ -63,20 +64,16 @@ export function parseScreenStyle(
     const [abbr, val] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
     const isVar = abbr.startsWith('$');
-    if (isVar) {
-      throw new Error(`[CSS-CTRL-ERR] $variable cannot use in screen. Found: "${abbrLine}"`);
+
+    // ถ้า isQueryBlock && isVar => throw
+    if (isQueryBlock && isVar) {
+      throw new Error(
+        `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${abbrLine}"`
+      );
     }
 
-    if (abbr.includes('--&')) {
-      const localVarMatches = abbr.match(/--&([\w-]+)/g) || [];
-      for (const matchVar of localVarMatches) {
-        const localVarName = matchVar.replace('--&', '');
-        if (!styleDef.localVars?.[localVarName]) {
-          throw new Error(
-            `[CSS-CTRL-ERR] Using local var "${matchVar}" in screen(...) before it is declared in base.`
-          );
-        }
-      }
+    if (isVar) {
+      throw new Error(`[CSS-CTRL-ERR] $variable cannot use in screen. Found: "${abbrLine}"`);
     }
 
     const expansions = [`${abbr}[${val}]`];
@@ -84,27 +81,6 @@ export function parseScreenStyle(
       const [abbr2, val2] = separateStyleAndProperties(ex);
       if (!abbr2) continue;
 
-      if (abbr2.startsWith('--&') && isImportant) {
-        throw new Error(
-          `[CSS-CTRL-ERR] !important is not allowed with local var (${abbr2}) in screen.`
-        );
-      }
-
-      if (val2.includes('--&')) {
-        const usedLocalVars = val2.match(/--&([\w-]+)/g) || [];
-        for (const usage of usedLocalVars) {
-          const localVarName = usage.replace('--&', '');
-          if (!styleDef.localVars?.[localVarName]) {
-            throw new Error(
-              `[CSS-CTRL-ERR] Using local var "${usage}" in screen(...) before it is declared in base.`
-            );
-          }
-        }
-      }
-
-      // -------------------------------------------
-      // (NEW) TODO ใช้ typography ใน screen
-      // -------------------------------------------
       if (abbr2 === 'ty') {
         const typKey = val2.trim();
         if (!globalTypographyDict[typKey]) {
@@ -126,25 +102,39 @@ export function parseScreenStyle(
             );
           }
           const finalVal = convertCSSVariable(subVal);
-          screenProps[cProp] = finalVal + (tkImp ? ' !important' : '');
+          if (Array.isArray(cProp)) {
+            for (const pr of cProp) {
+              screenProps[pr] = finalVal + (tkImp ? ' !important' : '');
+            }
+          } else {
+            screenProps[cProp] = finalVal + (tkImp ? ' !important' : '');
+          }
         }
         continue;
       }
 
-      // -------------------------------------------
-      // กรณีปกติ
-      // -------------------------------------------
-      const cProp = abbrMap[abbr2 as keyof typeof abbrMap];
-      if (!cProp) {
+      const def = abbrMap[abbr2 as keyof typeof abbrMap];
+      if (!def) {
         throw new Error(`[CSS-CTRL-ERR] "${abbr2}" not found in abbrMap (screen).`);
       }
+      let finalVal = convertCSSVariable(val2);
+
       if (val2.includes('--&')) {
-        const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
+        finalVal = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;
         });
-        screenProps[cProp] = replaced + (isImportant ? ' !important' : '');
+        finalVal += isImportant ? ' !important' : '';
       } else {
-        screenProps[cProp] = convertCSSVariable(val2) + (isImportant ? ' !important' : '');
+        finalVal += isImportant ? ' !important' : '';
+      }
+
+      // ถ้า def เป็น array => set หลาย property
+      if (Array.isArray(def)) {
+        for (const propName of def) {
+          screenProps[propName] = finalVal;
+        }
+      } else {
+        screenProps[def] = finalVal;
       }
     }
   }
