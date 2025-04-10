@@ -72,4 +72,14 @@ export function mergeStyleDef(target: IStyleDefinition, source: IStyleDefinition
       target.rootVars[rv] = source.rootVars[rv];
     }
   }
+
+  // (NEW) merge localVars
+  if (source.localVars) {
+    if (!target.localVars) {
+      target.localVars = {};
+    }
+    for (const lv in source.localVars) {
+      target.localVars[lv] = source.localVars[lv];
+    }
+  }
 }

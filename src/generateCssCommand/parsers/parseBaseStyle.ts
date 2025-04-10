@@ -41,11 +41,8 @@ export function parseBaseStyle(
   // -----------------------------------------------------------------------
   if (styleAbbr.startsWith('--&')) {
     // ประกาศ local var
-    if (isConstContext) {
-      throw new Error(
-        `[CSS-CTRL-ERR] Local var "${styleAbbr}" not allowed inside @const/theme.define block.`
-      );
-    }
+
+    // (REMOVED) เดิมเคยมีโค้ด if (isConstContext) throw error. ตอนนี้ยกเลิกเพื่ออนุญาตใน @const
     if (isQueryBlock) {
       throw new Error(
         `[CSS-CTRL-ERR] local var "${styleAbbr}" not allowed to declare in @query block. (line: ${abbrLine})`
