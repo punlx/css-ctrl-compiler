@@ -9,27 +9,33 @@ import * as vscode from 'vscode';
 const multiValueBorderAbbr = ['bd', 'bdl', 'bdr', 'bdt', 'bdb', 'bdx', 'bdy', 'ol'];
 
 /**
- * สมมติรายการที่จะแสดงเป็น suggestion สำหรับ Border-style
- * (คุณอาจใส่ค่าที่ใช้บ่อย เช่น "solid","dashed","dotted", ฯลฯ)
+ * รายการ values ที่จะแสดงเป็น suggestion หลัง value แรก
+ * เช่น "solid", "dotted", "red", "12px", ...
  */
-const borderStyleList = [
+const multiValueBorderSuggestions = [
   'none',
   'hidden',
   'solid',
-  'dashed',
   'dotted',
+  'dashed',
   'double',
   'groove',
   'ridge',
   'inset',
   'outset',
   'auto',
-  // จะเติม width / color อื่นๆ ก็ได้ ถ้าต้องการ
 ];
 
+/**
+ * createBorderStyleProvider:
+ * - Trigger: space ' '
+ * - ตรวจจับรูปแบบ: "<anything>(bd|bdl|bdr|...)[partial"
+ * - เช็ค tokens:
+ *   - ถ้า tokens.length=1 + เพิ่งพิมพ์ space => Suggest
+ *   - นอกนั้น => ไม่ suggest
+ */
 export function createBorderStyleProvider() {
   return vscode.languages.registerCompletionItemProvider(
-    // ให้ provider ทำงานในไฟล์ .ts (หรือปรับตามโปรเจกต์)
     { scheme: 'file', language: 'typescript' },
     {
       provideCompletionItems(document, position, token, context) {
@@ -42,48 +48,44 @@ export function createBorderStyleProvider() {
         }
         // อ่านบรรทัดปัจจุบัน
         const lineText = document.lineAt(position.line).text;
-        // substring ก่อน cursor
         const textBefore = lineText.slice(0, position.character);
 
-        // regex: จับ abbr[...] โดย abbr = bd|bdl|bdr|...
-        // group(1) => abbr, group(2) => partial (ข้อความหลัง '[' จนถึง cursor)
+        // (A) สร้าง regex จับ abbr ใด ๆ ใน multiValueBorderAbbr => ([^\]]*)$ => partial
+        // e.g.  "hover(bd[12px " => match(2)='bd', match(3)='12px '
+        // สังเกต .*(bd|...)\[ => จับไม่สนว่ามี hover( หรือ before( อะไรข้างหน้า
         const abbrList = multiValueBorderAbbr.join('|');
-        const pattern = new RegExp(`(?:^|\\s)(${abbrList})\\[([^\\]]*)$`);
+        const pattern = new RegExp(`.*(${abbrList})\\[([^\\]]*)$`);
+        // group(1) => abbr, group(2) => partial
 
         const match = textBefore.match(pattern);
         if (!match) {
           return undefined;
         }
 
-        // abbr = เช่น 'bd'
-        // partial = เช่น '12px ' (ถ้าพิมพ์ space)
+        // abbr => e.g. 'bd'
+        // partial => e.g. '2px ', '--gray ', ...
         const abbr = match[1];
         const partial = match[2] || '';
 
-        // แยก token ด้วยช่องว่าง
-        // สมมติพิมพ์ "12px " => tokens=['12px'], endsWithSpace => true
-        // สมมติพิมพ์ "12px red " => tokens=['12px','red'], endsWithSpace => true
+        // (B) split tokens
         const endsWithSpace = partial.endsWith(' ');
         const tokens = partial.trim().split(/\s+/).filter(Boolean);
+        // ex. partial='2px ' => tokens=['2px'], endsWithSpace=true
 
-        // เงื่อนไข:
-        //  - tokens.length=1 และเพิ่งพิมพ์ space => suggestion (คือหลัง Value ตัวแรก)
-        //  - นอกนั้น => ไม่ suggestion
+        // (C) เงื่อนไข => ถ้า tokens.length=1 && endsWithSpace => Suggest
         if (!(endsWithSpace && tokens.length === 1)) {
           return undefined;
         }
 
-        // ตรงนี้ => user พิมพ์ value แรกจบ + space => show suggestion ของ border-style
-        // สร้าง CompletionItem
-        const items = borderStyleList.map((val) => {
+        // (D) โชว์ suggestion (multiValueBorderSuggestions)
+        const items: vscode.CompletionItem[] = multiValueBorderSuggestions.map((val) => {
           const item = new vscode.CompletionItem(val, vscode.CompletionItemKind.Value);
           item.insertText = val;
           return item;
         });
-
         return items;
       },
     },
-    ' ' // Trigger = spacebar
+    ' ' // trigger บน spacebar
   );
 }
