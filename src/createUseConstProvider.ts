@@ -16,9 +16,9 @@ export function createUseConstProvider() {
         }
 
         // 2) ตรวจว่าอยู่ใน block .xxx { ... } หรือไม่
-        if (!isInsideClassBlock(document, position)) {
-          return;
-        }
+        // if (!isInsideClassBlock(document, position)) {
+        //   return;
+        // }
 
         // 3) อ่านบรรทัดปัจจุบัน
         const lineText = document.lineAt(position).text;
