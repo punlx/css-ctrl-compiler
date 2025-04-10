@@ -166,6 +166,14 @@ export const cssValues: Record<string, string[]> = {
     // shorthand เช่น "1px solid #000", "thin dotted red"
     '<border-width> <border-style> <color>',
   ],
+  'border-x': [
+    // shorthand เช่น "1px solid #000", "thin dotted red"
+    '<border-width> <border-style> <color>',
+  ],
+  'border-y': [
+    // shorthand เช่น "1px solid #000", "thin dotted red"
+    '<border-width> <border-style> <color>',
+  ],
   'border-color': [
     // shorthand เช่น "1px solid #000", "thin dotted red"
     '<color>',
@@ -747,8 +755,23 @@ export const cssValues: Record<string, string[]> = {
   height: ['auto', '<length>', '<percentage>', 'max-content', 'min-content', 'fit-content'],
   'max-height': ['none', '<length>', '<percentage>', 'max-content', 'min-content', 'fit-content'],
   'min-height': ['auto', '<length>', '<percentage>', 'max-content', 'min-content', 'fit-content'],
+  sq: ['auto', '<length>', '<percentage>', 'max-content', 'min-content', 'fit-content'],
+  'min-sq': ['auto', '<length>', '<percentage>', 'max-content', 'min-content', 'fit-content'],
+  'max-sq': ['none', '<length>', '<percentage>', 'max-content', 'min-content', 'fit-content'],
 
   margin: [
+    'auto',
+    '<length>',
+    '<percentage>',
+    // shorthand เช่น "10px 20px"
+  ],
+  'margin-x': [
+    'auto',
+    '<length>',
+    '<percentage>',
+    // shorthand เช่น "10px 20px"
+  ],
+  'margin-y': [
     'auto',
     '<length>',
     '<percentage>',
@@ -979,6 +1002,60 @@ export const cssValues: Record<string, string[]> = {
     'no-close-quote',
     '<string>',
   ],
+  /**
+   * Visibility / Direction / Writing
+   */
+  visibility: ['visible', 'hidden', 'collapse'],
+  direction: ['ltr', 'rtl'],
+  'writing-mode': ['horizontal-tb', 'vertical-rl', 'vertical-lr', 'sideways-rl', 'sideways-lr'],
+  /**
+   * Tab / Quotes / Text Emphasis
+   */
+  'tab-size': ['<integer>', '<length>'],
+  quotes: ['none', '<string>', '<string> <string>', '<string> <string> <string> <string>'],
+  'text-emphasis-style': [
+    'none',
+    'filled',
+    'open',
+    'dot',
+    'circle',
+    'double-circle',
+    'triangle',
+    'sesame',
+    '<string>', // เช่น custom symbol
+  ],
+  'text-emphasis-color': ['<color>', 'currentColor'],
+  'text-emphasis-position': ['over', 'under', 'left', 'right'],
+  /**
+   * Inset (Logical Positioning)
+   */
+  inset: ['auto', '<length>', '<percentage>'],
+  'inset-inline': ['auto', '<length>', '<percentage>'],
+  'inset-block': ['auto', '<length>', '<percentage>'],
+  'inset-inline-start': ['auto', '<length>', '<percentage>'],
+  'inset-inline-end': ['auto', '<length>', '<percentage>'],
+  'inset-block-start': ['auto', '<length>', '<percentage>'],
+  'inset-block-end': ['auto', '<length>', '<percentage>'],
+  /**
+   * Containment / Performance
+   */
+  contain: ['none', 'strict', 'content', 'layout', 'style', 'paint', 'size', 'inline-size'],
+  'contain-intrinsic-size': ['auto', '<length>', '<length> <length>'],
+  /**
+   *
+   */
+  'scroll-snap-type': ['none', 'x mandatory', 'y mandatory', 'block proximity', 'inline proximity'],
+  'scroll-snap-align': ['none', 'start', 'end', 'center'],
+  'scroll-snap-stop': ['normal', 'always'],
+  'scroll-padding': ['auto', '<length>', '<percentage>'],
+  'scroll-margin': ['<length>', '<percentage>'],
+  /**
+   * Accent / Caret / Selection / Marker
+   */
+  'accent-color': ['auto', '<color>'],
+  'caret-color': ['auto', '<color>'],
+  'forced-color-adjust': ['auto', 'none'],
+  'color-scheme': ['normal', 'light', 'dark', 'only light', 'only dark'],
 };
 
 const moreStyleForSuggestion = {
@@ -1030,14 +1107,54 @@ const moreStyleForSuggestion = {
 };
 
 export const variableAbbrSet = new Set([
+  // Visibility / Direction / Writing
+  'vis', // visibility
+  'dir', // direction
+  'wm', // writing-mode
+
+  // Tab / Quotes / Text Emphasis
+  'tab', // tab-size
+  'quotes', // quotes
+  'tx-em-st', // text-emphasis-style
+  'tx-em-c', // text-emphasis-color
+  'tx-em-pos', // text-emphasis-position
+
+  // Inset
+  'inset',
+  'inset-inline',
+  'inset-block',
+  'inset-inline-start',
+  'inset-inline-end',
+  'inset-block-start',
+  'inset-block-end',
+
+  // Containment
+  'contain',
+  'contain-size', // contain-intrinsic-size
+
+  // Scroll Snap
+  'scroll-snap-type',
+  'scroll-snap-align',
+  'scroll-snap-stop',
+  'scroll-padding',
+  'scroll-margin',
+
+  // Accent / Caret / Scheme
+  'acc', // accent-color
+  'caret', // caret-color
+  'fca', // forced-color-adjust
+  'cscheme', // color-scheme
   // Width / Height
   'w',
   'max-w',
   'min-w',
+
   'h',
   'max-h',
   'min-h',
-
+  'sq',
+  'max-sq',
+  'min-sq',
   // Margin
   'm',
   'ml',
@@ -1054,6 +1171,8 @@ export const variableAbbrSet = new Set([
 
   // Border
   'bd',
+  'bdx',
+  'bdy',
   'bd-w',
   'bdt',
   'bdt-w',
@@ -1153,17 +1272,22 @@ export const variableAbbrSet = new Set([
   'b',
 
   // Container
-  'ctn-type',
-  'ctn-name',
+  'container-type',
+  'container-name',
 ]);
 
 export const colorAbbrSet = new Set([
+  'tx-em-c', // text-emphasis-color
+  'acc', // accent-color
+  'caret', // caret-color
   // พื้นหลังและสีตัวอักษร
   'bg', // background-color
   'c', // color
 
   // Border
   'bd', // border (อาจประกอบด้วย border-color)
+  'bdx', // border (อาจประกอบด้วย border-color)
+  'bdy', // border (อาจประกอบด้วย border-color)
   'bd-c', // border-color
   'bdl', // border-left
   'bdl-c', // border-left-color
@@ -1221,7 +1345,7 @@ export const abbrStyleMapName: Record<string, string> = {
    ********************************************/
   am: 'animation',
   'am-delay': 'animation-delay',
-  'am-drt': 'animation-direction',
+  'am-dir': 'animation-direction',
   'am-dur': 'animation-duration',
   'am-fill': 'animation-fill-mode',
   'am-count': 'animation-iteration-count',
@@ -1249,6 +1373,8 @@ export const abbrStyleMapName: Record<string, string> = {
   bdt: 'border-top',
   bdr: 'border-right',
   bdb: 'border-bottom',
+  bdx: 'border-x',
+  bdy: 'border-y',
   'bd-w': 'border-width',
   'bd-c': 'border-color',
   'bd-st': 'border-style',
@@ -1294,9 +1420,9 @@ export const abbrStyleMapName: Record<string, string> = {
   /********************************************
    * Container Query
    ********************************************/
-  'ctn-type': 'container-type',
-  ctn: 'container',
-  'ctn-name': 'container-name',
+  'container-type': 'container-type',
+  container: 'container',
+  'container-name': 'container-name',
 
   /********************************************
    * Columns / Gap
@@ -1313,7 +1439,7 @@ export const abbrStyleMapName: Record<string, string> = {
   'fx-basis': 'flex-basis',
   basis: 'flex-basis', // (สำรอง ถ้าอยากใช้ basis[...] ตรง ๆ)
   wrap: 'flex-wrap',
-  drt: 'flex-direction',
+  fxd: 'flex-direction',
   flow: 'flex-flow',
   grow: 'flex-grow',
   shrink: 'flex-shrink',
@@ -1489,6 +1615,58 @@ export const abbrStyleMapName: Record<string, string> = {
    ********************************************/
   iso: 'isolation',
   ct: 'content',
+  /**
+   * Visibility / Direction / Writing
+   */
+  /**
+   * Visibility / Direction / Writing
+   */
+  vis: 'visibility',
+  dir: 'direction',
+  wm: 'writing-mode',
+
+  /**
+   * Tab / Quotes / Text Emphasis
+   */
+  tab: 'tab-size',
+  quotes: 'quotes',
+  'tx-em-st': 'text-emphasis-style',
+  'tx-em-c': 'text-emphasis-color',
+  'tx-em-pos': 'text-emphasis-position',
+
+  /**
+   * Inset (Logical Positioning)
+   */
+  inset: 'inset',
+  'inset-inline': 'inset-inline',
+  'inset-block': 'inset-block',
+  'inset-inline-start': 'inset-inline-start',
+  'inset-inline-end': 'inset-inline-end',
+  'inset-block-start': 'inset-block-start',
+  'inset-block-end': 'inset-block-end',
+
+  /**
+   * Containment / Performance
+   */
+  contain: 'contain',
+  'contain-size': 'contain-intrinsic-size',
+
+  /**
+   * Scroll Snap
+   */
+  'scroll-snap-type': 'scroll-snap-type',
+  'scroll-snap-align': 'scroll-snap-align',
+  'scroll-snap-stop': 'scroll-snap-stop',
+  'scroll-padding': 'scroll-padding',
+  'scroll-margin': 'scroll-margin',
+
+  /**
+   * Accent / Caret / Selection / Marker
+   */
+  acc: 'accent-color',
+  caret: 'caret-color',
+  fca: 'forced-color-adjust',
+  cscheme: 'color-scheme',
 };
 
 export const namedColorHex: Record<string, string> = {

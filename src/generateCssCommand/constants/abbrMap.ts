@@ -9,6 +9,8 @@ export const abbrMap: Record<string, string | string[]> = {
   sq: ['width', 'height'],
   'max-sq': ['max-width', 'max-height'],
   'min-sq': ['min-width', 'min-height'],
+  bdx: ['border-left', 'border-right'],
+  bdy: ['border-left', 'border-right'],
   // All
   a: 'all',
   // Alignment, Box, Display
@@ -22,7 +24,7 @@ export const abbrMap: Record<string, string | string[]> = {
    ********************************************/
   am: 'animation',
   'am-delay': 'animation-delay',
-  'am-drt': 'animation-direction',
+  'am-dir': 'animation-direction',
   'am-dur': 'animation-duration',
   'am-fill': 'animation-fill-mode',
   'am-count': 'animation-iteration-count',
@@ -95,9 +97,9 @@ export const abbrMap: Record<string, string | string[]> = {
   /********************************************
    * Container Query
    ********************************************/
-  'ctn-type': 'container-type',
-  ctn: 'container',
-  'ctn-name': 'container-name',
+  'container-type': 'container-type',
+  container: 'container',
+  'container-name': 'container-name',
 
   /********************************************
    * Columns / Gap
@@ -114,7 +116,7 @@ export const abbrMap: Record<string, string | string[]> = {
   'fx-basis': 'flex-basis',
   basis: 'flex-basis',
   wrap: 'flex-wrap',
-  drt: 'flex-direction',
+  fxd: 'flex-direction',
   flow: 'flex-flow',
   grow: 'flex-grow',
   shrink: 'flex-shrink',
@@ -294,4 +296,53 @@ export const abbrMap: Record<string, string | string[]> = {
    ********************************************/
   iso: 'isolation',
   ct: 'content',
+    /**
+   * Visibility / Direction / Writing
+   */
+    vis: 'visibility',
+    dir: 'direction',
+    wm: 'writing-mode',
+  
+    /**
+     * Tab / Quotes / Text Emphasis
+     */
+    tab: 'tab-size',
+    quotes: 'quotes',
+    'tx-em-st': 'text-emphasis-style',
+    'tx-em-c': 'text-emphasis-color',
+    'tx-em-pos': 'text-emphasis-position',
+  
+    /**
+     * Inset (Logical Positioning)
+     */
+    inset: 'inset',
+    'inset-inline': 'inset-inline',
+    'inset-block': 'inset-block',
+    'inset-inline-start': 'inset-inline-start',
+    'inset-inline-end': 'inset-inline-end',
+    'inset-block-start': 'inset-block-start',
+    'inset-block-end': 'inset-block-end',
+  
+    /**
+     * Containment / Performance
+     */
+    contain: 'contain',
+    'contain-size': 'contain-intrinsic-size',
+  
+    /**
+     * Scroll Snap
+     */
+    'scroll-snap-type': 'scroll-snap-type',
+    'scroll-snap-align': 'scroll-snap-align',
+    'scroll-snap-stop': 'scroll-snap-stop',
+    'scroll-padding': 'scroll-padding',
+    'scroll-margin': 'scroll-margin',
+  
+    /**
+     * Accent / Caret / Selection / Marker
+     */
+    acc: 'accent-color',
+    caret: 'caret-color',
+    fca: 'forced-color-adjust',
+    cscheme: 'color-scheme',
 };
