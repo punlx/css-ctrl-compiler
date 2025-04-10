@@ -73,13 +73,25 @@ export function mergeStyleDef(target: IStyleDefinition, source: IStyleDefinition
     }
   }
 
-  // (NEW) merge localVars
+  // merge localVars (already added previously)
   if (source.localVars) {
     if (!target.localVars) {
       target.localVars = {};
     }
     for (const lv in source.localVars) {
       target.localVars[lv] = source.localVars[lv];
+    }
+  }
+
+  // (NEW) merge plainLocalVars
+  if ((source as any).plainLocalVars) {
+    if (!(target as any).plainLocalVars) {
+      (target as any).plainLocalVars = {};
+    }
+    const sourcePlain = (source as any).plainLocalVars as Record<string, string>;
+    const targetPlain = (target as any).plainLocalVars as Record<string, string>;
+    for (const k in sourcePlain) {
+      targetPlain[k] = sourcePlain[k];
     }
   }
 }
