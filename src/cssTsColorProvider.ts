@@ -117,7 +117,7 @@ function parseValue(
   document: vscode.TextDocument
 ): ColorToken[] {
   // (A) ถ้า ab ขึ้นต้นด้วย '--&'
-  if (ab.startsWith('--&')) {
+  if (ab.startsWith('--')) {
     const c = getColorFromToken(val, mode);
     if (c) {
       const startOff = matchIndex + ab.length + 1; // +1 for '['

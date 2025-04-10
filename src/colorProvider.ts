@@ -47,8 +47,7 @@ export function createColorProvider(paletteMap: Record<string, Record<string, st
 
         // *** เดิมมี code if(!colorAbbrSet.has(ab)) return; -> ลบออก
         const ab = abMatch[1];
-        // (เราไม่เช็ค ab แล้ว)
-        if (!colorAbbrSet.has(ab) && !ab.startsWith('--&')) {
+        if (!colorAbbrSet.has(ab) && !ab.startsWith('--')) {
           return;
         }
         // 5) สร้าง CompletionItem จาก paletteMap
