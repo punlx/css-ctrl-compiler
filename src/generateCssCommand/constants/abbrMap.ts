@@ -116,7 +116,7 @@ export const abbrMap: Record<string, string | string[]> = {
   'fx-basis': 'flex-basis',
   basis: 'flex-basis',
   wrap: 'flex-wrap',
-  fxd: 'flex-direction',
+  fdir: 'flex-direction',
   flow: 'flex-flow',
   grow: 'flex-grow',
   shrink: 'flex-shrink',

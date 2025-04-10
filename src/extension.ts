@@ -56,6 +56,7 @@ import { createDefineTopKeyProvider } from './defineTopKeyProvider';
 import { globalDefineMap } from './generateCssCommand/createCssCtrlCssCommand';
 import { createEmptyStyleDef } from './generateCssCommand/helpers/createEmptyStyleDef';
 import { parseSingleAbbr } from './generateCssCommand/parsers/parseSingleAbbr';
+import { createBorderStyleProvider } from './createBorderStyleProvider';
 export let globalBreakpointDict: Record<string, string> = {};
 export let globalTypographyDict: Record<string, string> = {};
 
@@ -123,6 +124,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const queryPseudoProvider = createQueryPseudoProvider();
   const scopeProvider = createScopeSuggestionProvider();
   const queryScopeProvider = createQueryScopeSuggestionProvider();
+  const borderStyleProvider = createBorderStyleProvider();
 
   context.subscriptions.push(
     scopeProvider,
@@ -144,7 +146,8 @@ export async function activate(context: vscode.ExtensionContext) {
     defineProviderDisposable,
     defineTopKeyProviderDisposable,
     queryPseudoProvider,
-    queryScopeProvider
+    queryScopeProvider,
+    borderStyleProvider
   );
 
   initSpacingMap(spacingDict);

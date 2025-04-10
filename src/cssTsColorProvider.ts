@@ -2,7 +2,7 @@
 
 import * as vscode from 'vscode';
 import { parseThemePaletteFull } from './parseTheme';
-import { namedColorHex } from './constants';
+import { groupA, groupB, namedColorHex } from './constants';
 
 /**
  * สมมุติว่า parseThemePaletteFull คืนค่า:
@@ -14,12 +14,7 @@ import { namedColorHex } from './constants';
  */
 let paletteMap: Record<string, Record<string, string>> = {};
 
-/**
- * groupA: value คือสีเพียว ๆ
- * groupB: value อาจมีหลาย token เช่น "2px solid red"
- */
-const groupA = new Set(['bg', 'c', 'bd-c', 'bdl-c', 'bdt-c', 'bdr-c', 'bdb-c', 'ol-c']);
-const groupB = new Set(['bd', 'bdl', 'bdt', 'bdr', 'bdb', 'ol', 'sd']);
+
 
 /**
  * initPaletteMap:

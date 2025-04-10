@@ -1439,7 +1439,7 @@ export const abbrStyleMapName: Record<string, string> = {
   'fx-basis': 'flex-basis',
   basis: 'flex-basis', // (สำรอง ถ้าอยากใช้ basis[...] ตรง ๆ)
   wrap: 'flex-wrap',
-  fxd: 'flex-direction',
+  fdir: 'flex-direction',
   flow: 'flex-flow',
   grow: 'flex-grow',
   shrink: 'flex-shrink',
@@ -1924,3 +1924,35 @@ export const pseudoElements = [
   '::view-transition-new',
   '::view-transition-old',
 ];
+
+// ใช้ใน cssTsColorProvider ที่จะแสดง swatch สี
+/**
+ * groupA: value คือสีเพียว ๆ
+ * groupB: value อาจมีหลาย token เช่น "2px solid red"
+ */
+export const groupA = new Set([
+  'bg',
+  'c',
+  'bd-c',
+  'bdl-c',
+  'bdt-c',
+  'bdr-c',
+  'bdb-c',
+  'ol-c',
+  'tx-em-c',
+  'acc',
+  'caret',
+  'tx-decor-color',
+]);
+export const groupB = new Set([
+  'bd',
+  'bdx',
+  'bdy',
+  'bdl',
+  'bdt',
+  'bdr',
+  'bdb',
+  'ol',
+  'sd',
+  'tx-sd',
+]);
