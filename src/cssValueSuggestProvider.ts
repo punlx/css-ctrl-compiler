@@ -17,7 +17,8 @@ export function createCSSValueSuggestProvider() {
     {
       provideCompletionItems(document, position) {
         // 1) เฉพาะไฟล์ .ctrl.ts
-        if (!document.fileName.endsWith('.ctrl.ts')) return;
+        if (!document.fileName.endsWith('.ctrl.ts') && !document.fileName.endsWith('ctrl.theme.ts'))
+          return;
 
         // 2) อ่านบรรทัด => textBeforeCursor
         const lineText = document.lineAt(position).text;

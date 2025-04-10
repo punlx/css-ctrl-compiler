@@ -17,7 +17,10 @@ export function createKeyframeProvider(keyframeDict: Record<string, string>) {
     ],
     {
       provideCompletionItems(document, position) {
-        if (!document.fileName.endsWith('.ctrl.ts')) {
+        if (
+          !document.fileName.endsWith('.ctrl.ts') &&
+          !document.fileName.endsWith('ctrl.theme.ts')
+        ) {
           return;
         }
 

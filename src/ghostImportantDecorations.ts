@@ -16,7 +16,10 @@ export const ghostImportantDecorationType = vscode.window.createTextEditorDecora
  */
 export function updateImportantDecorations(editor: vscode.TextEditor) {
   // 1) ถ้าไฟล์ไม่ใช่ .ctrl.ts => ล้าง decoration
-  if (!editor.document.fileName.endsWith('.ctrl.ts')) {
+  if (
+    !editor.document.fileName.endsWith('.ctrl.ts') &&
+    !editor.document.fileName.endsWith('ctrl.theme.ts')
+  ) {
     editor.setDecorations(ghostImportantDecorationType, []);
     return;
   }

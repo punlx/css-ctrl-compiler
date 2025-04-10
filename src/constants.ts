@@ -1157,6 +1157,8 @@ export const variableAbbrSet = new Set([
   'min-sq',
   // Margin
   'm',
+  'mx',
+  'my',
   'ml',
   'mr',
   'mb',
@@ -1164,6 +1166,8 @@ export const variableAbbrSet = new Set([
 
   // Padding
   'p',
+  'px',
+  'py',
   'pl',
   'pr',
   'pb',

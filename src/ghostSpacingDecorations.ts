@@ -33,7 +33,10 @@ export function initSpacingMap(dict: Record<string, string>) {
  */
 export function updateSpacingDecorations(editor: vscode.TextEditor) {
   // 1) เช็คว่าเป็น .ctrl.ts ไหม
-  if (!editor.document.fileName.endsWith('.ctrl.ts')) {
+  if (
+    !editor.document.fileName.endsWith('.ctrl.ts') &&
+    !editor.document.fileName.endsWith('ctrl.theme.ts')
+  ) {
     // ไม่ใช่ => ล้าง decoration
     editor.setDecorations(ghostSpacingDecorationType, []);
     return;

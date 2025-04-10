@@ -33,6 +33,13 @@ export function createBorderStyleProvider() {
     { scheme: 'file', language: 'typescript' },
     {
       provideCompletionItems(document, position, token, context) {
+        // 1) เฉพาะไฟล์ .ctrl.ts
+        if (
+          !document.fileName.endsWith('.ctrl.ts') &&
+          !document.fileName.endsWith('ctrl.theme.ts')
+        ) {
+          return;
+        }
         // อ่านบรรทัดปัจจุบัน
         const lineText = document.lineAt(position.line).text;
         // substring ก่อน cursor

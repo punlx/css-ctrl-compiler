@@ -22,7 +22,10 @@ export const ghostDecorationType = vscode.window.createTextEditorDecorationType(
  */
 export function updateDecorations(editor: vscode.TextEditor) {
   // สมมุติเราต้องการให้โชว์ ghost text เฉพาะไฟล์ .ctrl.ts
-  if (!editor.document.fileName.endsWith('.ctrl.ts')) {
+  if (
+    !editor.document.fileName.endsWith('.ctrl.ts') &&
+    !editor.document.fileName.endsWith('ctrl.theme.ts')
+  ) {
     // ถ้าไม่ใช่ => เคลียร์ decoration
     editor.setDecorations(ghostDecorationType, []);
     return;

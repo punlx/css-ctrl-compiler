@@ -14,8 +14,6 @@ import { groupA, groupB, namedColorHex } from './constants';
  */
 let paletteMap: Record<string, Record<string, string>> = {};
 
-
-
 /**
  * initPaletteMap:
  * - เรียกตอน activate extension เพื่อลองหา ctrl.theme.ts ใน workspace
@@ -39,11 +37,10 @@ export async function initPaletteMap() {
  */
 export function createCssTsColorProvider() {
   return vscode.languages.registerColorProvider(
-    {
-      pattern: '**/*.ctrl.ts',
-      scheme: 'file',
-      language: 'typescript',
-    },
+    [
+      { pattern: '**/*.ctrl.ts', scheme: 'file', language: 'typescript' },
+      { pattern: '**/ctrl.theme.ts', scheme: 'file', language: 'typescript' },
+    ],
     new CssTsColorProvider()
   );
 }
