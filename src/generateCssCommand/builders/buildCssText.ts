@@ -1,3 +1,5 @@
+// src/generateCssCommand/builders/buildCssText.ts
+
 import { IStyleDefinition } from '../types';
 
 /**
@@ -24,21 +26,35 @@ export function buildCssText(
     }
   }
 
-  // base + localVars
+  // --------------------------------------------------------------------
+  // base + localVars + (NEW) plainLocalVars
+  // --------------------------------------------------------------------
   let baseProps = '';
+
+  // (A) plainLocalVars => "--xxx"
+  if ((styleDef as any).plainLocalVars) {
+    const pv = (styleDef as any).plainLocalVars as Record<string,string>;
+    for (const varName in pv) {
+      baseProps += `${varName}:${pv[varName]};`;
+    }
+  }
+
+  // (B) localVars => "--&xxx" (ซึ่งผ่าน transform => _resolvedLocalVars)
   const localVars = (styleDef as any)._resolvedLocalVars as Record<string, string> | undefined;
   if (localVars) {
-    // ประกาศ local var ของ block นี้ (top-level)
     for (const localVarName in localVars) {
       baseProps += `${localVarName}:${localVars[localVarName]};`;
     }
   }
+
+  // (C) base properties
   if (Object.keys(styleDef.base).length > 0) {
     for (const prop in styleDef.base) {
       const replacedVal = replaceLocalVarUsage(styleDef.base[prop], displayName);
       baseProps += `${prop}:${replacedVal};`;
     }
   }
+  // สร้าง block
   if (baseProps) {
     cssText += `.${displayName}{${baseProps}}`;
   }
@@ -122,7 +138,13 @@ function buildNestedQueryCss(
   // (NEW) resolve placeholder "@scope.xxx" => "SCOPE_REF(...)"
   finalSelector = maybeResolveScopeRef(finalSelector, shortNameToFinal, scopeName);
 
-  let out = buildRawCssText(finalSelector.replace(/^\./, ''), node.styleDef, rootDisplayName, shortNameToFinal, scopeName);
+  let out = buildRawCssText(
+    finalSelector.replace(/^\./, ''),
+    node.styleDef,
+    rootDisplayName,
+    shortNameToFinal,
+    scopeName
+  );
 
   for (const c of node.children) {
     // เปลี่ยน .xxx -> xxx เวลา pass ลงไป (เช่น .app_box .box1 -> 'app_box .box1')
@@ -148,6 +170,15 @@ function buildRawCssText(
 
   // localVars (ถ้ามี) - แต่ตาม design ไม่ควร
   let baseProps = '';
+
+  // (NEW) plainLocalVars
+  if ((styleDef as any).plainLocalVars) {
+    const pv = (styleDef as any).plainLocalVars as Record<string,string>;
+    for (const varName in pv) {
+      baseProps += `${varName}:${pv[varName]};`;
+    }
+  }
+
   const lvs = (styleDef as any)._resolvedLocalVars as Record<string, string> | undefined;
   if (lvs) {
     for (const localVarName in lvs) {
@@ -211,12 +242,24 @@ function buildRawCssText(
       let sel2 = transformNestedSelector(finalSelector.replace(/^\./, ''), nq.selector);
       sel2 = maybeResolveScopeRef(sel2, shortNameToFinal, scopeName);
 
-      // @ts-ignore
+
+
+
+
+
       cssText += buildRawCssText(sel2.replace(/^\./, ''), nq.styleDef, rootDisplayName, shortNameToFinal, scopeName);
 
       for (const c of nq.children) {
         const childParent = sel2.replace(/^\./, '');
-      // @ts-ignore
+
+
+
+
+
+        
+
+
+
         cssText += buildNestedQueryCss(childParent, c, rootDisplayName, shortNameToFinal, scopeName);
       }
     }
@@ -258,16 +301,13 @@ function maybeResolveScopeRef(
   shortNameToFinal: Map<string, string>,
   scopeName: string
 ): string {
-  // regex: SCOPE_REF(...) แบบซ้อนหลายจุดก็ replace ทีละจุด
   const re = /SCOPE_REF\(([^)]+)\)/g;
-
   return sel.replace(re, (_, inside) => {
     const trimmed = inside.trim();
     if (!trimmed) {
       throw new Error(`[CSS-CTRL] SCOPE_REF(...) is empty.`);
     }
-    // หา boundary ระหว่าง shortName กับ leftover (pseudo, space, etc.)
-    // example: "card2:hover .child"
+
     const match = trimmed.match(/^[a-zA-Z0-9_-]+/);
     if (!match) {
       throw new Error(
@@ -275,20 +315,14 @@ function maybeResolveScopeRef(
       );
     }
     const shortName = match[0];
-    const leftover = trimmed.slice(shortName.length); // อาจเป็น ":hover .child" หรือ "" ถ้าไม่มีต่อ
+    const leftover = trimmed.slice(shortName.length);
 
-    // lookup finalName
     if (!shortNameToFinal.has(shortName)) {
       throw new Error(
         `[CSS-CTRL] Referencing "@scope.${shortName}" but no class ".${shortName}" is declared in this file.`
       );
     }
     const finalCls = shortNameToFinal.get(shortName)!;
-
-    // ถ้า scope=none => finalCls = shortName (เหมือน parseClassBlocks)
-    // แต่จริงๆ finalCls อาจเท่ากับ shortName อยู่แล้ว
-    // leftover => เอาต่อท้ายได้เลย
-    // return ".finalCls leftover"
     return `.${finalCls}${leftover}`;
   });
 }

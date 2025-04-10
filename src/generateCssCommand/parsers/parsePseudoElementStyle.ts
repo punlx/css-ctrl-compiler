@@ -50,6 +50,21 @@ export function parsePseudoElementStyle(
         );
       }
 
+      // (NEW) plain local var => "--xxx"
+      if (abbr2.startsWith('--') && !abbr2.startsWith('--&')) {
+        // e.g. --color[red]
+        const rawName = abbr2.slice(2);
+        if (!rawName) {
+          throw new Error(`[CSS-CTRL-ERR] Missing local var name after "--". Found: "${ex}"`);
+        }
+        // เก็บ plainLocalVars
+        if (!(styleDef as any).plainLocalVars) {
+          (styleDef as any).plainLocalVars = {};
+        }
+        (styleDef as any).plainLocalVars[`--${rawName}`] = convertCSSVariable(val2);
+        continue;
+      }
+
       const isVariable = abbr2.startsWith('$');
       const realAbbr = isVariable ? abbr2.slice(1) : abbr2;
 
@@ -60,7 +75,6 @@ export function parsePseudoElementStyle(
       }
 
       if (realAbbr === 'ty') {
-        // typography => เดิม
         const typKey = val2.trim();
         if (!globalTypographyDict[typKey]) {
           throw new Error(
@@ -84,7 +98,6 @@ export function parsePseudoElementStyle(
           if (typeof cProp === 'string') {
             result[cProp] = finalVal + (tkImp ? ' !important' : '');
           } else {
-            // ถ้า typography บังเอิญ map หลาย property => loop
             for (const propName of cProp) {
               result[propName] = finalVal + (tkImp ? ' !important' : '');
             }
@@ -103,18 +116,18 @@ export function parsePseudoElementStyle(
       const finalVal = convertCSSVariable(val2);
 
       if (isVariable) {
-        // varPseudos => store runtime var => `var(--xxx-pseudoName)`
         styleDef.varPseudos[pseudoName]![realAbbr] = finalVal;
 
         if (Array.isArray(def)) {
           for (const propName of def) {
-            result[propName] = `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
+            result[propName] =
+              `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
           }
         } else {
-          result[def] = `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
+          result[def] =
+            `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
         }
       } else if (val2.includes('--&')) {
-        // local var usage
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;
         });
@@ -127,7 +140,6 @@ export function parsePseudoElementStyle(
           result[def] = valWithBang;
         }
       } else {
-        // normal
         const valWithBang = finalVal + (isImportant ? ' !important' : '');
         if (Array.isArray(def)) {
           for (const propName of def) {

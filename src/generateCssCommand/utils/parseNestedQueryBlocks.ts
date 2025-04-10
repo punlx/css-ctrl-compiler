@@ -64,16 +64,13 @@ export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult
     }
 
     // (B) ใช้ regex แทนทุกตำแหน่งที่เป็น "@scope.<class>"
-    rawSelector = rawSelector.replace(
-      /@scope\.([\w-]+)/g,
-      (_m, className) => {
-        if (!className) {
-          // กรณี "@scope." แต่ไม่มี className
-          throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing className after @scope.');
-        }
-        return `SCOPE_REF(${className})`;
+    rawSelector = rawSelector.replace(/@scope\.([\w-]+)/g, (_m, className) => {
+      if (!className) {
+        // กรณี "@scope." แต่ไม่มี className
+        throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing className after @scope.');
       }
-    );
+      return `SCOPE_REF(${className})`;
+    });
 
     let braceCount = 1;
     let j = braceOpenIdx + 1;
@@ -89,6 +86,7 @@ export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult
     const innerBody = body.slice(braceOpenIdx + 1, j).trim();
     const childResult = parseNestedQueryBlocks(innerBody);
 
+    // @ts-ignore
     queries.push({
       selector: rawSelector,
       rawLines: childResult.lines,

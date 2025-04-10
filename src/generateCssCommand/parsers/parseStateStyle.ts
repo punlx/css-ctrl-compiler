@@ -49,6 +49,22 @@ export function parseStateStyle(
         );
       }
 
+      // (NEW) plain local var => "--xxx"
+      if (abbr2.startsWith('--') && !abbr2.startsWith('--&')) {
+        // e.g. --color[red]
+        // เก็บเป็น plainLocalVars
+        const rawName = abbr2.slice(2);
+        if (!rawName) {
+          throw new Error(`[CSS-CTRL-ERR] Missing local var name after "--". Found: "${ex}"`);
+        }
+        // ไม่ห้ามใน state
+        if (!(styleDef as any).plainLocalVars) {
+          (styleDef as any).plainLocalVars = {};
+        }
+        (styleDef as any).plainLocalVars[`--${rawName}`] = convertCSSVariable(val2);
+        continue;
+      }
+
       const isVar = abbr2.startsWith('$');
       const realAbbr = isVar ? abbr2.slice(1) : abbr2;
 
@@ -58,7 +74,6 @@ export function parseStateStyle(
         );
       }
 
-      // ถ้า realAbbr === 'ty' => parse typography (เดิม)
       if (realAbbr === 'ty') {
         const typKey = val2.trim();
         if (!globalTypographyDict[typKey]) {
@@ -82,8 +97,6 @@ export function parseStateStyle(
           const valFinal = convertCSSVariable(subVal);
           result[typeof cProp === 'string' ? cProp : cProp[0]] =
             valFinal + (tkImp ? ' !important' : '');
-          // หมายเหตุ: ถ้า typography แยก property ได้หลายตัว 
-          // อาจต้อง loop expand อีกเหมือนกัน -- แล้วแต่ logic
         }
         continue;
       }
@@ -95,30 +108,25 @@ export function parseStateStyle(
 
       let finalVal = convertCSSVariable(val2);
 
-      if (isVar) {
-        // สร้าง varStates => root var
+      const isVar2 = abbr2.startsWith('$');
+      if (isVar2) {
         styleDef.varStates = styleDef.varStates || {};
         styleDef.varStates[funcName] = styleDef.varStates[funcName] || {};
         styleDef.varStates[funcName][realAbbr] = finalVal;
 
-        // สุดท้าย set property => var(--xxx-funcName)
-        // *** ถ้า def เป็น array => set หลาย property
         if (Array.isArray(def)) {
           for (const propName of def) {
             result[propName] =
               `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
           }
         } else {
-          result[def] =
-            `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
+          result[def] = `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
         }
       } else if (val2.includes('--&')) {
-        // local var usage
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {
           return `LOCALVAR(${varName})`;
         });
         const valWithBang = replaced + (isImportant ? ' !important' : '');
-        // *** ถ้า def เป็น array => set หลาย prop
         if (Array.isArray(def)) {
           for (const propName of def) {
             result[propName] = valWithBang;
@@ -127,7 +135,6 @@ export function parseStateStyle(
           result[def] = valWithBang;
         }
       } else {
-        // normal string
         const valWithBang = finalVal + (isImportant ? ' !important' : '');
         if (Array.isArray(def)) {
           for (const propName of def) {

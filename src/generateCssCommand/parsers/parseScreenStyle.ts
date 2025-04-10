@@ -113,6 +113,19 @@ export function parseScreenStyle(
         continue;
       }
 
+      // (NEW) plain local var => "--xxx"
+      if (abbr2.startsWith('--') && !abbr2.startsWith('--&')) {
+        const rawName = abbr2.slice(2);
+        if (!rawName) {
+          throw new Error(`[CSS-CTRL-ERR] Missing local var name after "--". Found: "${ex}"`);
+        }
+        if (!(styleDef as any).plainLocalVars) {
+          (styleDef as any).plainLocalVars = {};
+        }
+        (styleDef as any).plainLocalVars[`--${rawName}`] = convertCSSVariable(val2);
+        continue;
+      }
+
       const def = abbrMap[abbr2 as keyof typeof abbrMap];
       if (!def) {
         throw new Error(`[CSS-CTRL-ERR] "${abbr2}" not found in abbrMap (screen).`);
@@ -128,7 +141,6 @@ export function parseScreenStyle(
         finalVal += isImportant ? ' !important' : '';
       }
 
-      // ถ้า def เป็น array => set หลาย property
       if (Array.isArray(def)) {
         for (const propName of def) {
           screenProps[propName] = finalVal;
