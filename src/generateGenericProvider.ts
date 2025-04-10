@@ -27,6 +27,7 @@ function generateGeneric(sourceCode: string): string {
   // 3) ฟังก์ชัน parse $xxx[...] (รวม pseudo)
   // ---------------------------------------------------------------------------
   function parseStylesIntoSet(content: string, targetSet: Set<string>) {
+    // ---------- A) จัดการ pseudo function ----------
     const pseudoFnRegex =
       /\b(hover|focus|active|focus-within|focus-visible|target|disabled|enabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid|before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|screen|container)\s*\(([^)]*)\)/g;
     let fnMatch: RegExpExecArray | null;
@@ -35,12 +36,13 @@ function generateGeneric(sourceCode: string): string {
       const pseudoFn = fnMatch[1];
       const inside = fnMatch[2];
 
-      // *** จับทั้ง `$xxx[...]` และ `--&xxx[...]` ***
+      // หา $xxx[...] หรือ --&xxx[...]
       const styleMatches = [...inside.matchAll(/(\$[\w-]+|--&[\w-]+)\[/g)]
         .filter((m) => {
+          // กรองกรณีพิเศษ: ถ้าเจอ "--$" ต่อกัน
           const idx = m.index || 0;
           const matchText = m[1];
-          // ถ้าเป็น `$xxx` แต่ข้างหน้ามี `--` ให้ skip
+          // ถ้าเป็น `$xxx` แต่ข้างหน้ามี `--` => skip
           if (matchText.startsWith('$') && idx >= 2 && inside.slice(idx - 2, idx) === '--') {
             return false;
           }
@@ -48,22 +50,26 @@ function generateGeneric(sourceCode: string): string {
         })
         .map((m) => m[1]);
 
+      // **เปลี่ยน** ให้ `$bg => "bg"`, `--&local => "local"` ก่อนค่อย + pseudoFn
       for (const styleName of styleMatches) {
         if (styleName.startsWith('$')) {
-          targetSet.add(`${styleName}-${pseudoFn}`);
+          const raw = styleName.slice(1); // "$bg" => "bg"
+          targetSet.add(`${raw}-${pseudoFn}`);
         } else if (styleName.startsWith('--&')) {
-          const localName = styleName.slice('--&'.length);
-          targetSet.add(`&${localName}`);
+          const localName = styleName.slice('--&'.length); // "--&abc" => "abc"
+          targetSet.add(`${localName}-${pseudoFn}`);
         }
       }
     }
 
+    // ---------- B) หลังตัด pseudoFn ----------
     const pseudoFnRegexForRemove =
       /\b(?:hover|focus|active|focus-within|focus-visible|target|disabled|enabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid|before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|screen|container)\s*\(([^)]*)\)/g;
     const contentWithoutFn = content.replace(pseudoFnRegexForRemove, '');
 
     const directMatches = [...contentWithoutFn.matchAll(/(\$[\w-]+|--&[\w-]+)\[/g)]
       .filter((m) => {
+        // กันกรณี match $xxx ติดหน้า '--'
         const idx = m.index || 0;
         const matchText = m[1];
         if (
@@ -79,10 +85,12 @@ function generateGeneric(sourceCode: string): string {
 
     for (const styleName of directMatches) {
       if (styleName.startsWith('$')) {
-        targetSet.add(styleName);
+        // e.g. "$bg" => "bg"
+        targetSet.add(styleName.slice(1));
       } else if (styleName.startsWith('--&')) {
+        // e.g. "--&localVar" => "localVar"
         const localName = styleName.slice('--&'.length);
-        targetSet.add(`&${localName}`);
+        targetSet.add(localName);
       }
     }
   }
@@ -106,39 +114,38 @@ function generateGeneric(sourceCode: string): string {
   // ---------------------------------------------------------------------------
   // 5) Parse .className { ... } => เก็บลง classMap + merge @use
   // ---------------------------------------------------------------------------
-
   {
     const classRegex = /\.(\w+)(?:\([^)]*\))?\s*\{([^}]*)\}/g;
     let classMatch: RegExpExecArray | null;
     while ((classMatch = classRegex.exec(templateContent)) !== null) {
       const clsName = classMatch[1];
       const innerContent = classMatch[2];
-  
+
       // --- (A) ดึง substring ของ “ทั้งบรรทัด”
       const matchIndex = classMatch.index;
-  
+
       let lineStart = templateContent.lastIndexOf('\n', matchIndex);
       if (lineStart === -1) {
         lineStart = 0;
       }
-  
+
       let lineEnd = templateContent.indexOf('\n', matchIndex);
       if (lineEnd === -1) {
         lineEnd = templateContent.length;
       }
-  
+
       const lineContent = templateContent.slice(lineStart, lineEnd);
-  
+
       // --- (B) ถ้ามี @query -> skip
       if (lineContent.includes('@query')) {
         continue;
       }
-  
+
       // --- (C) ถ้าไม่ skip => เก็บใน classMap
       if (!classMap[clsName]) {
         classMap[clsName] = new Set();
       }
-  
+
       // (C1) @use ...
       {
         const useRegex = /@use\s+([^\{\}\n]+)/g;
@@ -155,7 +162,7 @@ function generateGeneric(sourceCode: string): string {
           }
         }
       }
-  
+
       // (C2) parse $xxx[...] + pseudo
       parseStylesIntoSet(innerContent, classMap[clsName]);
     }
