@@ -1,3 +1,5 @@
+// src/generateCssCommand/helpers/processClassBlocks.ts
+
 import { parseSingleAbbr } from '../parsers/parseSingleAbbr';
 import { IClassBlock, IStyleDefinition } from '../types';
 import { mergeStyleDef } from '../utils/mergeStyleDef';
@@ -152,8 +154,9 @@ export function processClassBlocks(
     const finalKey = makeFinalName(scopeName, clsName, block.body);
 
     // (NEW) transform variable (parent) แต่ใช้ finalKey แทน clsName
-    transformVariables(classStyleDef, finalKey);
-    transformLocalVariables(classStyleDef, finalKey);
+    // ***** จุดที่แก้ (เพิ่ม scopeName เป็นพารามิเตอร์) *****
+    transformVariables(classStyleDef, finalKey, scopeName);
+    transformLocalVariables(classStyleDef, finalKey, scopeName);
 
     // (NEW) เก็บ shortName -> finalKey
     shortNameToFinal.set(clsName, finalKey);

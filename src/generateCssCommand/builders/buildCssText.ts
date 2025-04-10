@@ -33,19 +33,15 @@ export function buildCssText(
 
   // (A) plainLocalVars => "--xxx"
   if ((styleDef as any).plainLocalVars) {
-    const pv = (styleDef as any).plainLocalVars as Record<string,string>;
+    const pv = (styleDef as any).plainLocalVars as Record<string, string>;
     for (const varName in pv) {
       baseProps += `${varName}:${pv[varName]};`;
     }
   }
 
-  // (B) localVars => "--&xxx" (ซึ่งผ่าน transform => _resolvedLocalVars)
-  const localVars = (styleDef as any)._resolvedLocalVars as Record<string, string> | undefined;
-  if (localVars) {
-    for (const localVarName in localVars) {
-      baseProps += `${localVarName}:${localVars[localVarName]};`;
-    }
-  }
+  // (B) [REMOVED logic for _resolvedLocalVars / localVars => เพราะเปลี่ยนไปไว้ใน :root แล้ว]
+  //     ~~ const localVars = (styleDef as any)._resolvedLocalVars ... ~~
+  //     ~~ if (localVars) { ... } ~~
 
   // (C) base properties
   if (Object.keys(styleDef.base).length > 0) {
@@ -147,7 +143,6 @@ function buildNestedQueryCss(
   );
 
   for (const c of node.children) {
-    // เปลี่ยน .xxx -> xxx เวลา pass ลงไป (เช่น .app_box .box1 -> 'app_box .box1')
     let childParent = finalSelector.replace(/^\./, '');
     out += buildNestedQueryCss(childParent, c, rootDisplayName, shortNameToFinal, scopeName);
   }
@@ -173,18 +168,15 @@ function buildRawCssText(
 
   // (NEW) plainLocalVars
   if ((styleDef as any).plainLocalVars) {
-    const pv = (styleDef as any).plainLocalVars as Record<string,string>;
+    const pv = (styleDef as any).plainLocalVars as Record<string, string>;
     for (const varName in pv) {
       baseProps += `${varName}:${pv[varName]};`;
     }
   }
 
-  const lvs = (styleDef as any)._resolvedLocalVars as Record<string, string> | undefined;
-  if (lvs) {
-    for (const localVarName in lvs) {
-      baseProps += `${localVarName}:${lvs[localVarName]};`;
-    }
-  }
+  // (REMOVED) ไม่ประกาศ local vars ในบล็อกตรงนี้อีกแล้ว
+  // const lvs = (styleDef as any)._resolvedLocalVars as Record<string, string> | undefined;
+  // if (lvs) { ... }
 
   for (const p in styleDef.base) {
     const replacedVal = replaceLocalVarUsage(styleDef.base[p], rootDisplayName);
@@ -242,25 +234,23 @@ function buildRawCssText(
       let sel2 = transformNestedSelector(finalSelector.replace(/^\./, ''), nq.selector);
       sel2 = maybeResolveScopeRef(sel2, shortNameToFinal, scopeName);
 
-
-
-
-
-
-      cssText += buildRawCssText(sel2.replace(/^\./, ''), nq.styleDef, rootDisplayName, shortNameToFinal, scopeName);
+      cssText += buildRawCssText(
+        sel2.replace(/^\./, ''),
+        nq.styleDef,
+        rootDisplayName,
+        shortNameToFinal,
+        scopeName
+      );
 
       for (const c of nq.children) {
         const childParent = sel2.replace(/^\./, '');
-
-
-
-
-
-        
-
-
-
-        cssText += buildNestedQueryCss(childParent, c, rootDisplayName, shortNameToFinal, scopeName);
+        cssText += buildNestedQueryCss(
+          childParent,
+          c,
+          rootDisplayName,
+          shortNameToFinal,
+          scopeName
+        );
       }
     }
   }
@@ -287,6 +277,7 @@ function dotIfNeeded(sel: string) {
 
 /**
  * replaceLocalVarUsage - แทน "LOCALVAR(varName)" เป็น "var(--varName-<displayName>)"
+ * (Note: อาจไม่ได้ใช้แล้ว ถ้าทำ transform ก่อนเรียก build แต่เก็บไว้ป้องกันกรณีที่ตกหล่น)
  */
 function replaceLocalVarUsage(input: string, displayName: string): string {
   const placeholderRegex = /LOCALVAR\(([\w-]+)\)/g;

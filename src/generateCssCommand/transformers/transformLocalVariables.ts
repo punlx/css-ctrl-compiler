@@ -2,25 +2,30 @@ import { IStyleDefinition } from '../types';
 
 export function transformLocalVariables(
   styleDef: IStyleDefinition,
-  displayName: string // e.g. "box_abCdE" or "app_box"
+  displayName: string,  // e.g. "box_abCdE" or "app_box"
+  scopeName: string     // (NEW) เพื่อเช็คเงื่อนไข scope=none
 ): void {
+  // (1) ถ้า scope=none => ถ้าเจอ localVars => throw error
+  if (scopeName === 'none' && styleDef.localVars && Object.keys(styleDef.localVars).length > 0) {
+    throw new Error(`[CSS-CTRL-ERR] local var (--&xxx) is not allowed in scope=none.`);
+  }
+
   if (!styleDef.localVars) {
     return;
   }
 
-  // ประกาศ final local vars
-  const localVarProps: Record<string, string> = {};
-
+  // ประกาศ final local vars ลงใน :root (แทนที่จะประกาศในคลาส)
   for (const varName in styleDef.localVars) {
     const rawVal = styleDef.localVars[varName];
-    // e.g. --color-box_abCdE
+    // เดิมเคยเป็น --varName-displayName ในคลาส
+    // ตอนนี้โยนไปไว้ใน :root
     const finalVarName = `--${varName}-${displayName}`;
-    localVarProps[finalVarName] = rawVal;
+
+    styleDef.rootVars = styleDef.rootVars || {};
+    styleDef.rootVars[finalVarName] = rawVal;
   }
 
-  (styleDef as any)._resolvedLocalVars = localVarProps;
-
-  // replace placeholder LOCALVAR(...) => var(--xxx)
+  // replace placeholder LOCALVAR(...) => var(--xxx-displayName)
   const placeholderRegex = /LOCALVAR\(([\w-]+)\)/g;
   const replacer = (match: string, p1: string): string => {
     const finalVarName = `--${p1}-${displayName}`;
