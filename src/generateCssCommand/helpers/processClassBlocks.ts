@@ -3,19 +3,20 @@
 import { parseSingleAbbr } from '../parsers/parseSingleAbbr';
 import { IClassBlock, IStyleDefinition } from '../types';
 import { mergeStyleDef } from '../utils/mergeStyleDef';
-import { createEmptyStyleDef } from './createEmptyStyleDef';
+import { createEmptyStyleDef } from '../helpers/createEmptyStyleDef';
 
 import { parseNestedQueryBlocks } from '../utils/parseNestedQueryBlocks';
 
-// (NEW) import transformVariables & transformLocalVariables
+// (REMOVED) import transformVariables & transformLocalVariables
 import { transformVariables } from '../transformers/transformVariables';
 import { transformLocalVariables } from '../transformers/transformLocalVariables';
 
-// (ถ้าใช้ scope=hash => makeFinalName)
+// (REMOVED) No more direct transformVariables or transformLocalVariables here
 import { makeFinalName } from '../utils/sharedScopeUtils';
 
 /**
- * parseNestedQueryDef: เปลี่ยนมาไม่ copy parentDef.localVars -> subDef
+ * parseNestedQueryDef - ...
+ * ...
  */
 // @ts-ignore
 function parseNestedQueryDef(
@@ -25,10 +26,8 @@ function parseNestedQueryDef(
 ) {
   const out = [];
   for (const node of queries) {
-    // สร้าง styleDef ลูก
     const subDef = createEmptyStyleDef();
 
-    // แยก @use vs line ปกติ
     const usedConstNames: string[] = [];
     const normalLines: string[] = [];
     for (const ln of node.rawLines) {
@@ -44,13 +43,11 @@ function parseNestedQueryDef(
         throw new Error(`[CSS-CTRL-ERR] @use unknown const "${cName}" in nested @query.`);
       }
       const partialDef = constMap.get(cName)!;
-      // ห้าม partialDef.hasRuntimeVar => throw ...
       if (partialDef.hasRuntimeVar) {
         throw new Error(
           `[CSS-CTRL-ERR] @use "${cName}" has $variable, not allowed inside nested @query block.`
         );
       }
-      // ถ้ามี localVar => policy ว่ายังไง?
       if (partialDef.localVars) {
         throw new Error(
           `[CSS-CTRL-ERR] @use "${cName}" has localVar, not allowed inside nested @query block.`
@@ -59,9 +56,8 @@ function parseNestedQueryDef(
       mergeStyleDef(subDef, partialDef);
     }
 
-    // parse normal lines => parseSingleAbbr (isQueryBlock = true)
     for (const qLn of normalLines) {
-      parseSingleAbbr(qLn, subDef, false, true /* isQueryBlock */, false);
+      parseSingleAbbr(qLn, subDef, false, true, false);
     }
 
     // recursive children
@@ -78,9 +74,8 @@ function parseNestedQueryDef(
 }
 
 /**
- * (UPDATED)
  * processClassBlocks - parse .className { ... } => สร้าง styleDef => ใส่ลง map
- * *** เพิ่มเติม: return ทั้ง Map<finalKey, styleDef> และ shortNameToFinal เพื่อรองรับ @scope.xxx
+ * return ทั้ง Map<finalKey, styleDef> และ shortNameToFinal เพื่อรองรับ @scope.xxx
  */
 export function processClassBlocks(
   scopeName: string,
@@ -92,8 +87,6 @@ export function processClassBlocks(
 } {
   const localClasses = new Set<string>();
   const classMap = new Map<string, IStyleDefinition>();
-
-  // (NEW) เก็บ shortName => finalName
   const shortNameToFinal = new Map<string, string>();
 
   for (const block of classBlocks) {
@@ -108,10 +101,8 @@ export function processClassBlocks(
 
     const classStyleDef = createEmptyStyleDef();
 
-    // (A) parse nested queries
     const { lines, queries } = parseNestedQueryBlocks(block.body);
 
-    // (B) แยก @use vs normal line
     let usedConstNames: string[] = [];
     const normalLines: string[] = [];
     for (const ln of lines) {
@@ -122,7 +113,6 @@ export function processClassBlocks(
       }
     }
 
-    // (C) merge const ถ้ามี
     for (const cName of usedConstNames) {
       if (!constMap.has(cName)) {
         throw new Error(`[CSS-CTRL-ERR] @use refers to unknown const "${cName}".`);
@@ -131,15 +121,12 @@ export function processClassBlocks(
       mergeStyleDef(classStyleDef, partialDef);
     }
 
-    // (D) parse normal lines => parseSingleAbbr
     for (const ln of normalLines) {
       parseSingleAbbr(ln, classStyleDef);
     }
 
-    // (E) parse nested queries => เก็บใน styleDef.nestedQueries
     classStyleDef.nestedQueries = parseNestedQueryDef(queries, classStyleDef, constMap);
 
-    // (F) เช็ค local var
     if ((classStyleDef as any)._usedLocalVars) {
       for (const usedVar of (classStyleDef as any)._usedLocalVars) {
         if (!classStyleDef.localVars || !(usedVar in classStyleDef.localVars)) {
@@ -150,11 +137,10 @@ export function processClassBlocks(
       }
     }
 
-    // (G) ทำ finalKey
+    // (REMOVED) เดิมเคยมี comment "ถ้าใช้ scope=hash => makeFinalName..."
+
     const finalKey = makeFinalName(scopeName, clsName, block.body);
 
-    // (NEW) transform variable (parent) แต่ใช้ finalKey แทน clsName
-    // ***** จุดที่แก้ (เพิ่ม scopeName เป็นพารามิเตอร์) *****
     transformVariables(classStyleDef, finalKey, scopeName);
     transformLocalVariables(classStyleDef, finalKey, scopeName);
 

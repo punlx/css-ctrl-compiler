@@ -33,11 +33,6 @@ export function createScopeSuggestionProvider(): vscode.Disposable {
           itemNone.detail = 'Use @scope none => no prefix or unique scope';
           suggestions.push(itemNone);
 
-          // 2) "hash"
-          const itemHash = new vscode.CompletionItem('hash', vscode.CompletionItemKind.Enum);
-          itemHash.detail = 'Use @scope hash => generate hashed class name';
-          suggestions.push(itemHash);
-
           // 3) "<name>"
           const itemCustom = new vscode.CompletionItem('<name>', vscode.CompletionItemKind.Snippet);
           itemCustom.detail = 'Use custom scope name => ex. "app", "button" etc.';
