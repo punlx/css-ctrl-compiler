@@ -1,9 +1,11 @@
+// src/generateCssCommand/transformers/transformVariables.ts
+
 import { IStyleDefinition } from '../types';
 
 export function transformVariables(
   styleDef: IStyleDefinition,
   displayName: string, // e.g. "box_AbCdE" or "app_card"
-  scopeName: string   // (NEW) รับ scopeName เข้ามาเพื่อตรวจเงื่อนไข
+  scopeName: string // (NEW) รับ scopeName เข้ามาเพื่อตรวจเงื่อนไข
 ): void {
   // (NEW) ถ้า scope=none => ถ้า styleDef.hasRuntimeVar => throw error
   if (scopeName === 'none' && styleDef.hasRuntimeVar) {

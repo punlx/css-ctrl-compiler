@@ -1,3 +1,5 @@
+// src/generateCssCommand/transformers/transformLocalVariables.ts
+
 import { IStyleDefinition } from '../types';
 
 export function transformLocalVariables(
