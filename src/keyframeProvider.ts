@@ -8,6 +8,11 @@ import { abbrMap } from './generateCssCommand/constants/abbrMap';
  * - Suggest keyframe name (my-move, pulse, etc.) เมื่อพิมพ์ "am[" หรือ "am-name["
  * - แสดง detail = keyframeName
  * - แสดง documentation = multi-line css ที่ parse จาก DSL
+ * - Requirement เสริม:
+ *   1) ถ้าเป็นไฟล์ .ctrl.ts ให้สแกนหา @keyframe <keyframe-name> { ... } ในไฟล์นั้นด้วย
+ *   2) เอาชื่อ keyframe ที่สแกนได้ไปรวมกับ keyframeDict
+ *   3) ถ้ามีชื่อซ้ำกันให้แสดงแค่ชื่อเดียว
+ *   4) แปลง DSL ที่เจอในไฟล์ .ctrl.ts เป็น documentation ได้เหมือนเดิม
  */
 export function createKeyframeProvider(keyframeDict: Record<string, string>) {
   return vscode.languages.registerCompletionItemProvider(
@@ -34,18 +39,36 @@ export function createKeyframeProvider(keyframeDict: Record<string, string>) {
           return;
         }
 
+        // สแกน keyframe เฉพาะในไฟล์ .ctrl.ts
+        let localKeyframeDict: Record<string, string> = {};
+        if (document.fileName.endsWith('.ctrl.ts')) {
+          const docText = document.getText();
+          localKeyframeDict = parseLocalKeyframes(docText);
+        }
+
+        // รวมชื่อ keyframe จาก keyframeDict และ localKeyframeDict (กันซ้ำด้วย Set)
+        const combinedKeyframeNames = new Set([
+          ...Object.keys(keyframeDict),
+          ...Object.keys(localKeyframeDict),
+        ]);
+
         // สร้าง suggestion
         const completions: vscode.CompletionItem[] = [];
 
-        for (const keyframeName of Object.keys(keyframeDict)) {
-          const rawDSL = keyframeDict[keyframeName];
+        for (const keyframeName of combinedKeyframeNames) {
+          // ถ้ามีใน localKeyframeDict ให้ใช้ DSL ของ local ก่อน (หรือจะเปลี่ยน logic ได้ตามต้องการ)
+          const rawDSL = localKeyframeDict[keyframeName] || keyframeDict[keyframeName];
+
+          if (!rawDSL) {
+            continue;
+          }
+
           // parse DSL => multi-line CSS
           const docString = buildKeyframeDoc(rawDSL);
 
           const item = new vscode.CompletionItem(keyframeName, vscode.CompletionItemKind.Value);
           item.detail = keyframeName;
           item.documentation = docString;
-
           item.insertText = keyframeName;
 
           completions.push(item);
@@ -56,6 +79,27 @@ export function createKeyframeProvider(keyframeDict: Record<string, string>) {
     },
     '[' // trigger character
   );
+}
+
+/**
+ * parseLocalKeyframes:
+ * - ค้นหา @keyframe <keyframe-name> { ... } ในไฟล์ .ctrl.ts
+ * - ดึง keyframeName + raw DSL (สิ่งที่อยู่ภายใน {})
+ * - เก็บเข้า localDict เพื่อเอาไป merge กับ keyframeDict
+ */
+function parseLocalKeyframes(documentText: string): Record<string, string> {
+  const localDict: Record<string, string> = {};
+  // ใช้ [\s\S]*? + 'g' + '?' (lazy) เพื่อ match หลายบรรทัด
+  const pattern = /@keyframe\s+([\w-]+)\s*\{([\s\S]*?)\}/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(documentText)) !== null) {
+    const keyframeName = match[1];
+    const rawDSL = match[2].trim();
+    localDict[keyframeName] = rawDSL;
+  }
+
+  return localDict;
 }
 
 /**
@@ -72,28 +116,21 @@ function buildKeyframeDoc(raw: string): string {
   // แล้ว parse abbr(...) => "property: value;"
   // docString => "0% {\n  background-color:red;\n  ...\n}\n..."
 
-  // match step e.g.  "([0-9]+%|from|to)\((.*?)\)"
   const pattern = /(\d+%|from|to)\((.*?)\)/g;
   let match: RegExpExecArray | null;
-
   const lines: string[] = [];
 
   while ((match = pattern.exec(raw)) !== null) {
-    const stepName = match[1]; // "0%", "50%", "from", "to"
-    const dsl = match[2]; // "bg[red] c[white]" or "$bg[black] w[100px]" ...
-    // parse dsl => lines
+    const stepName = match[1];
+    const dsl = match[2];
     const styleLines = parseKeyframeStyleDSL(dsl);
-
-    // build block
     lines.push(`${stepName} {`);
     for (const ln of styleLines) {
       lines.push(`  ${ln}`);
     }
     lines.push(`}`);
-    lines.push(''); // เว้นบรรทัด
+    lines.push('');
   }
-
-  // join
   return lines.join('\n');
 }
 
@@ -111,28 +148,19 @@ function parseKeyframeStyleDSL(dsl: string): string[] {
   const result: string[] = [];
 
   for (const chunk of chunks) {
-    // match ex. "$bg[black]" or "bg[red]"
     const m = /^(\$?)([\w-]+)\[([^\]]+)\]$/.exec(chunk);
     if (!m) {
-      // ถ้าไม่ตรง pattern => ข้าม (ตาม requirement)
       continue;
     }
     // m[1] => '$' or ''
     // m[2] => abbr e.g. "bg"
     // m[3] => value e.g. "black"
-    let abbr = m[2];
+    const abbr = m[2];
     const val = m[3];
-
-    // ถ้ามี $ ก็ตัดออกแล้ว proceed
-    // (ในที่นี้ $ แค่นำหน้า abbr)
-    // abbr = abbr (already no $)
     const cssProp = abbrMap[abbr];
     if (!cssProp) {
-      // abbr ไม่มีใน abbrMap => ข้าม
       continue;
     }
-    // val e.g. "red" => "red"
-    // ex. "background-color:red;"
     result.push(`${cssProp}: ${val};`);
   }
 

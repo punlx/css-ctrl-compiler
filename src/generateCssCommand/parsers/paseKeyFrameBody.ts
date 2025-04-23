@@ -63,10 +63,12 @@ export function buildKeyframesCSS(
   return out;
 }
 
-/**
- * parseKeyframeBody
- *   ลบ '%' ออกจากชื่อ var (เช่น 50% => 50) แต่ใน label ของ keyframe ยังเป็น 50%
- */
+// ------------------------------------------------------------------
+// parseKeyframeBody: โค้ดฉบับเต็ม (ไม่มีข้ามบรรทัด),
+// เพิ่มการแก้ไขรูปแบบ varName เป็น --<kf>_<label>_<varName>-app_box
+// โดยสมมติ hard-code ชื่อคลาส "-app_box" และ remove "app_" จาก finalKfName
+// ------------------------------------------------------------------
+
 export function parseKeyframeBody(
   rawBlock: string,
   finalKfName: string
@@ -119,12 +121,18 @@ export function parseKeyframeBody(
         // ลบ '%' ออกจาก label
         const cleanLabel = label.replace('%', '');
 
-        const finalVarName = `--${finalKfName}-${cleanLabel}-${varName}`;
+        // (CHANGED) ตัวอย่าง: ลบ "app_" ออกจาก finalKfName, จากนั้นต่อ "-app_box"
+        // สมมติว่า finalKfName = "app_move" => baseKf = "move"
+        const baseKf = finalKfName.replace(/^app_/, '');
+
+        // รูปแบบใหม่ => --move_0_bg-app_box
+        const finalVarName = `--${baseKf}_${cleanLabel}_${varName}-app_box`;
+
         rootVars[finalVarName] = rawVal;
 
         // replace ใน base
+        const pat = `var(--${varName})`;
         for (const p in stepDef.base) {
-          const pat = `var(--${varName})`;
           stepDef.base[p] = stepDef.base[p].replace(pat, `var(${finalVarName})`);
         }
       }
