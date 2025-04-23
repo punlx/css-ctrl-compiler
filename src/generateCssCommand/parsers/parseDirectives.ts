@@ -104,8 +104,6 @@ export function parseDirectives(text: string): IParseDirectivesResult {
     directives,
     classBlocks,
     constBlocks,
-
-    // --- ADDED FOR KEYFRAME ---
     keyframeBlocks,
   };
 }
