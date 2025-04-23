@@ -39,10 +39,6 @@ export function buildCssText(
     }
   }
 
-  // (B) [REMOVED logic for _resolvedLocalVars / localVars => เพราะเปลี่ยนไปไว้ใน :root แล้ว]
-  //     ~~ const localVars = (styleDef as any)._resolvedLocalVars ... ~~
-  //     ~~ if (localVars) { ... } ~~
-
   // (C) base properties
   if (Object.keys(styleDef.base).length > 0) {
     for (const prop in styleDef.base) {
@@ -50,7 +46,6 @@ export function buildCssText(
       baseProps += `${prop}:${replacedVal};`;
     }
   }
-  // สร้าง block
   if (baseProps) {
     cssText += `.${displayName}{${baseProps}}`;
   }
@@ -101,12 +96,24 @@ export function buildCssText(
     }
   }
 
-  // (OLD) styleDef.queries => (ไม่ใช้แล้ว)
   // (NEW) nestedQueries => recursive
   if (styleDef.nestedQueries && styleDef.nestedQueries.length > 0) {
     for (const nq of styleDef.nestedQueries) {
-      // @ts-ignore
       cssText += buildNestedQueryCss(displayName, nq, displayName, shortNameToFinal, scopeName);
+    }
+  }
+
+  // (NEW) pluginStates ถ้ามี
+  if ((styleDef as any).pluginStates) {
+    const pluginObj = (styleDef as any).pluginStates;
+    for (const funcName in pluginObj) {
+      const { classAttr, props } = pluginObj[funcName];
+      let pluginProps = '';
+      for (const p in props) {
+        const replacedVal = replaceLocalVarUsage(props[p], displayName);
+        pluginProps += `${p}:${replacedVal};`;
+      }
+      cssText += `.${displayName}.${classAttr}{${pluginProps}}`;
     }
   }
 
@@ -114,10 +121,12 @@ export function buildCssText(
 }
 
 /**
- * buildNestedQueryCss - สร้าง CSS สำหรับ @query แบบ nested
- * @param parentDisplayName : string ของ parent (เช่น "app_box", "box_AbCdE")
- * @param node : { selector, styleDef, children[] }
- * @param rootDisplayName : ใช้แทน LOCALVAR(...) (เพราะ localVar ผูกกับ displayName ของคลาสแม่)
+ * buildNestedQueryCss
+ * @param parentDisplayName
+ * @param node
+ * @param rootDisplayName
+ * @param shortNameToFinal
+ * @param scopeName
  */
 function buildNestedQueryCss(
   parentDisplayName: string,
@@ -131,7 +140,6 @@ function buildNestedQueryCss(
   scopeName: string
 ): string {
   let finalSelector = transformNestedSelector(parentDisplayName, node.selector);
-  // (NEW) resolve placeholder "@scope.xxx" => "SCOPE_REF(...)"
   finalSelector = maybeResolveScopeRef(finalSelector, shortNameToFinal, scopeName);
 
   let out = buildRawCssText(
@@ -151,8 +159,8 @@ function buildNestedQueryCss(
 }
 
 /**
- * buildRawCssText - สร้าง CSS จาก styleDef 1 ชุด
- *   แต่แทน LOCALVAR(...) ด้วยข้อมูลจาก rootDisplayName
+ * buildRawCssText
+ * สร้าง CSS จาก styleDef 1 ชุด
  */
 function buildRawCssText(
   finalSelector: string,
@@ -163,20 +171,13 @@ function buildRawCssText(
 ): string {
   let cssText = '';
 
-  // localVars (ถ้ามี) - แต่ตาม design ไม่ควร
   let baseProps = '';
-
-  // (NEW) plainLocalVars
   if ((styleDef as any).plainLocalVars) {
     const pv = (styleDef as any).plainLocalVars as Record<string, string>;
     for (const varName in pv) {
       baseProps += `${varName}:${pv[varName]};`;
     }
   }
-
-  // (REMOVED) ไม่ประกาศ local vars ในบล็อกตรงนี้อีกแล้ว
-  // const lvs = (styleDef as any)._resolvedLocalVars as Record<string, string> | undefined;
-  // if (lvs) { ... }
 
   for (const p in styleDef.base) {
     const replacedVal = replaceLocalVarUsage(styleDef.base[p], rootDisplayName);
@@ -187,13 +188,13 @@ function buildRawCssText(
   }
 
   // states
-  for (const st in styleDef.states) {
-    const obj = styleDef.states[st];
+  for (const stName in styleDef.states) {
+    const obj = styleDef.states[stName];
     let props = '';
     for (const p in obj) {
       props += `${p}:${replaceLocalVarUsage(obj[p], rootDisplayName)};`;
     }
-    cssText += `${dotIfNeeded(finalSelector)}:${st}{${props}}`;
+    cssText += `${dotIfNeeded(finalSelector)}:${stName}{${props}}`;
   }
 
   // screens
@@ -219,7 +220,6 @@ function buildRawCssText(
     for (const pseudoKey in styleDef.pseudos) {
       const pseudoObj = styleDef.pseudos[pseudoKey];
       if (!pseudoObj) continue;
-
       let pseudoProps = '';
       for (const prop in pseudoObj) {
         pseudoProps += `${prop}:${replaceLocalVarUsage(pseudoObj[prop], rootDisplayName)};`;
@@ -228,7 +228,20 @@ function buildRawCssText(
     }
   }
 
-  // nested queries (recursive)
+  // (NEW) pluginStates ใน nested
+  if ((styleDef as any).pluginStates) {
+    const pluginObj = (styleDef as any).pluginStates;
+    for (const funcName in pluginObj) {
+      const { classAttr, props } = pluginObj[funcName];
+      let pluginProps = '';
+      for (const p in props) {
+        pluginProps += `${p}:${replaceLocalVarUsage(props[p], rootDisplayName)};`;
+      }
+      cssText += `${dotIfNeeded(finalSelector)}.${classAttr}{${pluginProps}}`;
+    }
+  }
+
+  // recursive nestedQueries
   if (styleDef.nestedQueries && styleDef.nestedQueries.length > 0) {
     for (const nq of styleDef.nestedQueries) {
       let sel2 = transformNestedSelector(finalSelector.replace(/^\./, ''), nq.selector);
@@ -258,27 +271,19 @@ function buildRawCssText(
   return cssText;
 }
 
-/** transformNestedSelector: "&" => .parentSel, otherwise => ".parentSel childSel" */
 function transformNestedSelector(parentSel: string, childSel: string): string {
   const trimmed = childSel.trim();
   if (trimmed.includes('&')) {
-    // e.g. &.box2 => .parentSel.box2
     return trimmed.replace(/&/g, `.${parentSel}`);
   }
-  // default => .parentSel childSel
   return `.${parentSel} ${trimmed}`;
 }
 
-/** ป้องกันกรณี finalSelector ไม่มีจุด */
 function dotIfNeeded(sel: string) {
   if (sel.startsWith('.')) return sel;
   return '.' + sel;
 }
 
-/**
- * replaceLocalVarUsage - แทน "LOCALVAR(varName)" เป็น "var(--varName-<displayName>)"
- * (Note: อาจไม่ได้ใช้แล้ว ถ้าทำ transform ก่อนเรียก build แต่เก็บไว้ป้องกันกรณีที่ตกหล่น)
- */
 function replaceLocalVarUsage(input: string, displayName: string): string {
   const placeholderRegex = /LOCALVAR\(([\w-]+)\)/g;
   return input.replace(placeholderRegex, (_, varName) => {
@@ -286,7 +291,6 @@ function replaceLocalVarUsage(input: string, displayName: string): string {
   });
 }
 
-/** (NEW) ฟังก์ชัน resolveScopeRef - ใช้กับ selector ที่มี "SCOPE_REF(...)" */
 function maybeResolveScopeRef(
   sel: string,
   shortNameToFinal: Map<string, string>,
@@ -298,7 +302,6 @@ function maybeResolveScopeRef(
     if (!trimmed) {
       throw new Error(`[CSS-CTRL] SCOPE_REF(...) is empty.`);
     }
-
     const match = trimmed.match(/^[a-zA-Z0-9_-]+/);
     if (!match) {
       throw new Error(
@@ -307,7 +310,6 @@ function maybeResolveScopeRef(
     }
     const shortName = match[0];
     const leftover = trimmed.slice(shortName.length);
-
     if (!shortNameToFinal.has(shortName)) {
       throw new Error(
         `[CSS-CTRL] Referencing "@scope.${shortName}" but no class ".${shortName}" is declared in this file.`

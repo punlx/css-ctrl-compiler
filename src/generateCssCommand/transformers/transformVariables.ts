@@ -16,14 +16,10 @@ export function transformVariables(
   if (styleDef.varBase) {
     for (const varName in styleDef.varBase) {
       const rawValue = styleDef.varBase[varName];
-      // final var name => --varName-displayName
       const finalVarName = `--${varName}-${displayName}`;
-
       styleDef.rootVars = styleDef.rootVars || {};
       styleDef.rootVars[finalVarName] = rawValue;
-
       for (const cssProp in styleDef.base) {
-        // replace var(--varName) => var(--varName-displayName)
         const pattern = `var(--${varName})`;
         styleDef.base[cssProp] = styleDef.base[cssProp].replace(pattern, `var(${finalVarName})`);
       }
@@ -36,12 +32,10 @@ export function transformVariables(
       const varsOfThatState: Record<string, string> = styleDef.varStates[stName] || {};
       for (const varName in varsOfThatState) {
         const rawValue = varsOfThatState[varName];
-        // final var name => --varName-displayName-stName
-        const finalVarName = `--${varName}-${displayName}-${stName}`;
-
+        const finalVarName = `--${varName}-${displayName}-${stName}`; // e.g. --bg-app_box-option-active
         styleDef.rootVars = styleDef.rootVars || {};
         styleDef.rootVars[finalVarName] = rawValue;
-
+        // replace in states[stName]
         const stateProps = styleDef.states[stName];
         if (stateProps) {
           for (const cssProp in stateProps) {
@@ -59,18 +53,43 @@ export function transformVariables(
       const pseudoVars: Record<string, string> = styleDef.varPseudos[pseudoName] || {};
       for (const varName in pseudoVars) {
         const rawValue = pseudoVars[varName];
-        // final var => --varName-displayName-pseudoName
         const finalVarName = `--${varName}-${displayName}-${pseudoName}`;
-
         styleDef.rootVars = styleDef.rootVars || {};
         styleDef.rootVars[finalVarName] = rawValue;
-
         const pseudoProps = styleDef.pseudos[pseudoName];
         if (pseudoProps) {
           for (const cssProp in pseudoProps) {
             const pat = `var(--${varName}-${pseudoName})`;
             pseudoProps[cssProp] = pseudoProps[cssProp].replace(pat, `var(${finalVarName})`);
           }
+        }
+      }
+    }
+  }
+
+  // (NEW) handle pluginStates => คล้ายกับ state variables, เพราะ parsePluginStateStyle เก็บ $var ใน varStates
+  // แต่ส่วน property จะอยู่ใน (styleDef as any).pluginStates[stateName].props => เราต้อง replace var(--xxx-stateName)
+  if ((styleDef as any).pluginStates && styleDef.varStates) {
+    for (const stName in (styleDef as any).pluginStates) {
+      // เช็คว่ามี varStates[stName] ไหม
+      // @ts-ignore
+      const pluginStateVars = styleDef.varStates[stName];
+      if (!pluginStateVars) continue;
+      const pluginObj = (styleDef as any).pluginStates[stName];
+      if (!pluginObj) continue;
+      const propsObj = pluginObj.props || {};
+      // loop varName in pluginStateVars
+      // @ts-ignore
+      for (const varName in pluginStateVars) {
+        const rawValue = pluginStateVars[varName];
+        const finalVarName = `--${varName}-${displayName}-${stName}`;
+        styleDef.rootVars = styleDef.rootVars || {};
+        styleDef.rootVars[finalVarName] = rawValue;
+        const pat = `var(--${varName}-${stName})`;
+        // replace in propsObj
+        for (const propKey in propsObj) {
+          const oldVal = propsObj[propKey];
+          propsObj[propKey] = oldVal.replace(pat, `var(${finalVarName})`);
         }
       }
     }

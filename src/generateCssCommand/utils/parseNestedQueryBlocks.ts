@@ -1,6 +1,7 @@
 // src/generateCssCommand/utils/parseNestedQueryBlocks.ts
 
 import { INestedQueryNode } from '../types';
+import { pluginStatesConfig } from '../constants/pluginStatesConfig';
 
 interface IParsedNestedQueriesResult {
   lines: string[];
@@ -55,22 +56,21 @@ export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult
       throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing selector after @query.');
     }
 
-    // (A) ตรวจจับเคส "@scope" เปล่าๆ  หรือ "@scope " (ไม่มีจุด)
-    // เช่น  "@query @scope { ... }"
-    // ถ้าเจอ => throw error
+    // (A) ตรวจจับเคส "@scope" เปล่าๆ หรือ "@scope " (ไม่มีจุด)
     if (/@scope(\s|$|\{)/.test(rawSelector)) {
-      // regex ข้างบน match: "@scope" ตามด้วย space, จบสตริง, หรือ {
       throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing className after "@scope."');
     }
 
-    // (B) ใช้ regex แทนทุกตำแหน่งที่เป็น "@scope.<class>"
+    // (B) replace ทุกตำแหน่งที่เป็น "@scope.<class>" => SCOPE_REF(<class>)
     rawSelector = rawSelector.replace(/@scope\.([\w-]+)/g, (_m, className) => {
       if (!className) {
-        // กรณี "@scope." แต่ไม่มี className
         throw new Error('[CSS-CTRL] parseNestedQueryBlocks: missing className after @scope.');
       }
       return `SCOPE_REF(${className})`;
     });
+
+    // (NEW) แปลง selector รูปแบบ :option-active / &:option-active => ให้มี ".listboxPlugin-active..."
+    rawSelector = maybeTransformPluginQuerySelector(rawSelector);
 
     let braceCount = 1;
     let j = braceOpenIdx + 1;
@@ -97,4 +97,61 @@ export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult
   }
 
   return { lines, queries };
+}
+
+/**
+ * maybeTransformPluginQuerySelector
+ * - ตรวจ selector ถ้าเป็นรูปแบบ ":option-active" => " .listboxPlugin-active[...]"
+ *   หรือ "&:option-active" => "&.listboxPlugin-active[...]"
+ */
+function maybeTransformPluginQuerySelector(rawSelector: string): string {
+  const trimmed = rawSelector.trim();
+
+  // check กรณี :xxx-xxx, &:xxx-xxx
+  // เช่น :option-active / &:option-active
+  // ขั้นตอน:
+  // 1) แยกว่าขึ้นต้นด้วย ":" (ไม่มี &) หรือ "&:" (มี &)
+  // 2) แยก pluginPrefix, suffix
+  // 3) lookup pluginStatesConfig => ได้ classAttr (e.g. "listboxPlugin-active[aria-selected='true']")
+  // 4) ถ้าเป็น ":" => return " .xxx"
+  //    ถ้าเป็น "&:" => return "&.xxx"
+
+  if (trimmed.startsWith(':') || trimmed.startsWith('&:')) {
+    const useDescendant = trimmed.startsWith(':'); // true => ไม่มี &, => ใส่ space
+    let namePart = '';
+
+    if (useDescendant) {
+      // e.g. :option-active => slice(1) => "option-active"
+      namePart = trimmed.slice(1);
+    } else {
+      // e.g. &:option-active => slice(2) => "option-active"
+      namePart = trimmed.slice(2);
+    }
+
+    // split ด้วย "-"
+    const dashPos = namePart.indexOf('-');
+    if (dashPos > 0) {
+      const prefix = namePart.slice(0, dashPos);
+      const suffix = namePart.slice(dashPos + 1);
+      if (pluginStatesConfig[prefix] && pluginStatesConfig[prefix][suffix]) {
+        const pluginCls = pluginStatesConfig[prefix][suffix];
+        // e.g. "listboxPlugin-active" or "accordionPlugin-expanded[aria-expanded='true']"
+
+        // (NEW) check มี '['...']' หรือไม่ ถ้ามี => "listboxPlugin-active[aria-selected='true']"
+        // สร้างรูปแบบ => useDescendant => " .listboxPlugin-active[aria-selected='true']"
+        //            => !useDescendant => "&.listboxPlugin-active[aria-selected='true']"
+        if (useDescendant) {
+          // => " .xxx"
+          return ` .${pluginCls.replace(/^\./, '')}`;
+        } else {
+          // => "&.xxx"
+          // ถ้าปลายทาง pluginCls เริ่มด้วยจุดก็ลบก่อน
+          const stripped = pluginCls.replace(/^\./, '');
+          return `&.${stripped}`;
+        }
+      }
+    }
+  }
+
+  return trimmed;
 }

@@ -9,9 +9,15 @@ import { parsePseudoElementStyle } from './parsePseudoElementStyle';
 import { parseScreenStyle } from './parseScreenStyle';
 import { parseStateStyle } from './parseStateStyle';
 
+// (NEW) import parsePluginStateStyle
+import { parsePluginStateStyle } from './parsePluginStateStyle';
+
+// (NEW) import pluginStatesConfig
+import { pluginStatesConfig } from '../constants/pluginStatesConfig';
+
 /**
  * parseSingleAbbr
- * @param abbrLine         ex. "bg[red]" or "hover(bg[red])" or "@query .box2 { ... }"
+ * @param abbrLine         ex. "bg[red]" or "hover(bg[red])" or "@query .box { ... }"
  * @param styleDef
  * @param isConstContext   true => in @const or theme.define block
  * @param isQueryBlock     true => we are inside an @query block (=> disallow $variable)
@@ -24,8 +30,6 @@ export function parseSingleAbbr(
   isConstContext: boolean = false,
   isQueryBlock: boolean = false,
   isDefineContext: boolean = false,
-
-  // --- ADDED FOR KEYFRAME ---
   keyframeNameMap?: Map<string, string>
 ) {
   const trimmed = abbrLine.trim();
@@ -46,13 +50,11 @@ export function parseSingleAbbr(
 
   // ถ้าอยู่ใน @query block => ห้ามประกาศ localVar, ห้ามใช้ $variable
   if (isQueryBlock) {
-    // ห้าม "ประกาศ" localVar
     if (/^--&[\w-]+\[/.test(trimmed)) {
       throw new Error(
         `[CSS-CTRL-ERR] Local var not allowed to declare inside @query block. Found: "${trimmed}"`
       );
     }
-    // ห้าม $variable
     if (/^\$[\w-]+\[/.test(trimmed)) {
       throw new Error(
         `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${trimmed}"`
@@ -60,7 +62,7 @@ export function parseSingleAbbr(
     }
   }
 
-  // ถ้าสไตล์นี้ยังไม่มี hasRuntimeVar แล้วเจอ $var => ติด flag
+  // ถ้ายังไม่มี hasRuntimeVar แล้วเจอ $var => ติด flag
   if (!styleDef.hasRuntimeVar && /\$[\w-]+\[/.test(trimmed)) {
     styleDef.hasRuntimeVar = true;
   }
@@ -72,24 +74,46 @@ export function parseSingleAbbr(
     return;
   }
 
-  // มี prefix => เช็กว่าเป็น state/pseudo/screen/container หรือเปล่า
-  const prefix = trimmed.slice(0, openParenIndex).trim();
+  // (NEW) เช็ค pluginState ผ่าน pluginStatesConfig แทน regex
+  // 1) แยก prefix: funcName = substring ก่อน '('
+  // 2) split ด้วย "-"
+  const funcName = trimmed.slice(0, openParenIndex).trim(); // e.g. "option-active"
+  const dashPos = funcName.indexOf('-');
+  if (dashPos > 0) {
+    // prefixSuffix
+    const pluginPrefix = funcName.slice(0, dashPos);
+    const pluginSuffix = funcName.slice(dashPos + 1);
+    if (
+      pluginPrefix &&
+      pluginSuffix &&
+      pluginStatesConfig[pluginPrefix] &&
+      pluginStatesConfig[pluginPrefix][pluginSuffix]
+    ) {
+      // => เป็น pluginState
+      parsePluginStateStyle(trimmed, styleDef, isConstContext, isQueryBlock, keyframeNameMap);
+      return;
+    }
+  }
 
   // state
+  const prefix = funcName; // ex. "hover", "focus", etc.
   if (knownStates.includes(prefix)) {
     parseStateStyle(trimmed, styleDef, isConstContext, isQueryBlock);
     return;
   }
+
   // pseudo
   if (supportedPseudos.includes(prefix)) {
     parsePseudoElementStyle(trimmed, styleDef, isConstContext, isQueryBlock);
     return;
   }
+
   // screen
   if (prefix === 'screen') {
     parseScreenStyle(trimmed, styleDef, isConstContext, isQueryBlock);
     return;
   }
+
   // container
   if (prefix === 'container') {
     parseContainerStyle(trimmed, styleDef, isConstContext, isQueryBlock);

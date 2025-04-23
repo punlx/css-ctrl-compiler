@@ -2,9 +2,10 @@
 
 import * as vscode from 'vscode';
 import { pseudoClasses, pseudoElements } from './constants';
+import { pluginStatePseudos } from './generateCssCommand/constants/pluginStatesConfig';
 
 export function createQueryPseudoProvider() {
-  const allPseudos = [...pseudoClasses, ...pseudoElements];
+  const allPseudos = [...pseudoClasses, ...pseudoElements, ...pluginStatePseudos];
 
   return vscode.languages.registerCompletionItemProvider(
     [
