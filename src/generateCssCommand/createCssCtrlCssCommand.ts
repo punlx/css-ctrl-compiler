@@ -64,7 +64,7 @@ export function generateCssCtrlCssFromSource(sourceText: string): string {
 
   // (F) สร้าง CSS ของ keyframe blocks
   //     (เรารู้ finalName ของแต่ละ kf แล้วจาก keyframeNameMap)
-  const keyframeCss = buildKeyframesCSS(keyframeBlocks, keyframeNameMap);
+  const keyframeCss = buildKeyframesCSS(keyframeBlocks, keyframeNameMap, scopeName);
 
   // (G) สร้าง CSS ของ class ต่าง ๆ (ตามลำดับ)
   let finalCss = keyframeCss; // วาง keyframe ก่อน

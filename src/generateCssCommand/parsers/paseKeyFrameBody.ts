@@ -1,44 +1,43 @@
-// -------------------------------------------------------------------
-// (1) สร้าง map original keyframe name -> final keyframe name
-//     เช่น scope=app => "kf1" => "app_kf1"
+// src/generateCssCommand/parsers/paseKeyFrameBody.ts
 
 import { createEmptyStyleDef } from '../helpers/createEmptyStyleDef';
 import { IKeyframeBlock, IStyleDefinition } from '../types';
 import { parseSingleAbbr } from './parseSingleAbbr';
 
-// -------------------------------------------------------------------
+/**
+ * (1) สร้าง map original keyframe name -> final keyframe name
+ * เช่น scope=app => "kf1" => "app_kf1"
+ */
 export function buildKeyframeNameMap(keyframeBlocks: IKeyframeBlock[], scopeName: string) {
   const map = new Map<string, string>();
   const nameSet = new Set<string>();
-
   for (const kb of keyframeBlocks) {
     if (nameSet.has(kb.name)) {
       throw new Error(`[CSS-CTRL-ERR] Duplicate keyframe name "${kb.name}" in the same file.`);
     }
     nameSet.add(kb.name);
-
     const finalName = scopeName === 'none' ? kb.name : `${scopeName}_${kb.name}`;
     map.set(kb.name, finalName);
   }
   return map;
 }
 
-// -------------------------------------------------------------------
-// (2) buildKeyframesCSS จาก keyframeBlocks + keyframeNameMap
-// -------------------------------------------------------------------
+/**
+ * (2) buildKeyframesCSS จาก keyframeBlocks + keyframeNameMap
+ * ใช้ parseKeyframeBody เพื่อ parse เนื้อในแต่ละ keyframe
+ */
 export function buildKeyframesCSS(
   keyframeBlocks: IKeyframeBlock[],
-  keyframeNameMap: Map<string, string>
+  keyframeNameMap: Map<string, string>,
+  scopeName: string
 ): string {
   if (!keyframeBlocks || keyframeBlocks.length === 0) {
     return '';
   }
-
   let out = '';
   for (const kb of keyframeBlocks) {
     const finalKfName = keyframeNameMap.get(kb.name)!;
-    const steps = parseKeyframeBody(kb.rawBlock, finalKfName);
-
+    const steps = parseKeyframeBody(kb.rawBlock, finalKfName, scopeName);
     // ประกาศ rootVar ถ้ามี
     let rootVarBlock = '';
     for (const rv in steps.rootVars) {
@@ -47,7 +46,6 @@ export function buildKeyframesCSS(
     if (rootVarBlock) {
       out += `:root{${rootVarBlock}}`;
     }
-
     // สร้างเนื้อ @keyframes
     let kfBody = '';
     for (const step of steps.stepList) {
@@ -59,19 +57,20 @@ export function buildKeyframesCSS(
     }
     out += `@keyframes ${finalKfName}{${kfBody}}`;
   }
-
   return out;
 }
 
-// ------------------------------------------------------------------
-// parseKeyframeBody: โค้ดฉบับเต็ม (ไม่มีข้ามบรรทัด),
-// เพิ่มการแก้ไขรูปแบบ varName เป็น --<kf>_<label>_<varName>-app_box
-// โดยสมมติ hard-code ชื่อคลาส "-app_box" และ remove "app_" จาก finalKfName
-// ------------------------------------------------------------------
-
+/**
+ * (3) parseKeyframeBody:
+ * - ดึงบรรทัดภายใน block @keyframe { ... }
+ * - แต่ละบรรทัดต้องอยู่ในรูปแบบ 0%(bg[red]) หรือ from(bg[...]) เป็นต้น
+ * - สร้าง styleDef ของแต่ละ step => รวมเป็น stepList
+ * - ถ้ามี varBase => ประกาศใน rootVars และแทนที่ใน base
+ */
 export function parseKeyframeBody(
   rawBlock: string,
-  finalKfName: string
+  finalKfName: string,
+  scopeName: string
 ): {
   stepList: Array<{
     label: string;
@@ -87,7 +86,7 @@ export function parseKeyframeBody(
   const rootVars: Record<string, string> = {};
 
   for (const ln of lines) {
-    // e.g. 0%(bg[red]), 50%(...), from(...), to(...)
+    // ตัวอย่าง: 0%(bg[red]) / 50%(...) / from(...) / to(...)
     const match = ln.match(/^([0-9]{1,3}%|from|to)\s*\(([\s\S]*?)\)$/);
     if (!match) {
       throw new Error(`[CSS-CTRL-ERR] Invalid keyframe syntax: "${ln}"`);
@@ -95,10 +94,10 @@ export function parseKeyframeBody(
     const label = match[1];
     const abbrPart = match[2].trim();
 
-    // สร้าง styleDef
+    // สร้าง styleDef สำหรับ step นี้
     const stepDef = createEmptyStyleDef();
 
-    // ห้าม --& / @use
+    // ไม่อนุญาต local var (--&) และ @use ภายใน keyframe
     if (abbrPart.includes('--&')) {
       throw new Error(`[CSS-CTRL-ERR] local var (--&xxx) not allowed in @keyframe. Found: "${ln}"`);
     }
@@ -106,10 +105,9 @@ export function parseKeyframeBody(
       throw new Error(`[CSS-CTRL-ERR] @use not allowed in @keyframe. Found: "${ln}"`);
     }
 
-    // split abbr
+    // แยกแต่ละ abbreviation แล้ว parse ลงใน stepDef
     const tokens = abbrPart.split(/ (?=[^\[\]]*(?:\[|$))/);
     for (const tk of tokens) {
-      // parseSingleAbbr(tk, stepDef, false, false, false, undefined)
       parseSingleAbbr(tk, stepDef, false, false, false, undefined);
     }
 
@@ -117,16 +115,12 @@ export function parseKeyframeBody(
     if (stepDef.varBase) {
       for (const varName in stepDef.varBase) {
         const rawVal = stepDef.varBase[varName];
-
-        // ลบ '%' ออกจาก label
         const cleanLabel = label.replace('%', '');
-
-        // (CHANGED) ตัวอย่าง: ลบ "app_" ออกจาก finalKfName, จากนั้นต่อ "-app_box"
-        // สมมติว่า finalKfName = "app_move" => baseKf = "move"
-        const baseKf = finalKfName.replace(/^app_/, '');
-
-        // รูปแบบใหม่ => --move_0_bg-app_box
-        const finalVarName = `--${baseKf}_${cleanLabel}_${varName}-app_box`;
+        // ใช้ pattern ที่สอดคล้องกับ scopeName / finalKfName / step
+        const finalVarName =
+          scopeName === 'none'
+            ? `--${varName}-${finalKfName}-${cleanLabel}`
+            : `--${varName}-${scopeName}_${finalKfName}-${cleanLabel}`;
 
         rootVars[finalVarName] = rawVal;
 
