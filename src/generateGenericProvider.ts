@@ -18,10 +18,11 @@ function generateGeneric(sourceCode: string): string {
   const templateContent = match[2]; // โค้ดภายใน backtick
 
   // ---------------------------------------------------------------------------
-  // 2) เตรียมโครงสร้าง classMap / constMap
+  // 2) เตรียมโครงสร้าง classMap / constMap / keyframeMap
   // ---------------------------------------------------------------------------
   const classMap: Record<string, Set<string>> = {};
   const constMap: Record<string, Set<string>> = {};
+  const keyframeMap: Record<string, Set<string>> = {};
 
   // ---------------------------------------------------------------------------
   // 3) ฟังก์ชัน parse $xxx[...] (รวม pseudo)
@@ -96,6 +97,32 @@ function generateGeneric(sourceCode: string): string {
   }
 
   // ---------------------------------------------------------------------------
+  // 3.1) ฟังก์ชัน parse keyframe body => ดึงทุก step, หา $xxx
+  // ---------------------------------------------------------------------------
+  function parseKeyframeBody(kfName: string, body: string): Set<string> {
+    const result = new Set<string>();
+    // step เช่น 10%(...), 50%(...), 100%(...) หรือ from(...), to(...)
+    const stepRegex = /(\d+)%\s*\(([^)]*)\)|(from|to)\s*\(([^)]*)\)/g;
+    let mm: RegExpExecArray | null;
+    while ((mm = stepRegex.exec(body)) !== null) {
+      const numericStep = mm[1]; // "10" หรือ undefined
+      const fromToStep = mm[3]; // "from" หรือ "to" หรือ undefined
+      const inside = mm[2] || mm[4] || '';
+      const stepLabel = numericStep || fromToStep || '';
+
+      // หา $var
+      const varRegex = /\$([\w-]+)/g;
+      let varMatch: RegExpExecArray | null;
+      while ((varMatch = varRegex.exec(inside)) !== null) {
+        const varName = varMatch[1]; // "bg" จาก $bg
+        // สร้างคีย์ เช่น "kf2_10_bg" หรือ "kf2_from_bg"
+        result.add(`${kfName}_${stepLabel}_${varName}`);
+      }
+    }
+    return result;
+  }
+
+  // ---------------------------------------------------------------------------
   // 4) Parse @const ... { ... } => ใส่ใน constMap
   // ---------------------------------------------------------------------------
   {
@@ -112,7 +139,20 @@ function generateGeneric(sourceCode: string): string {
   }
 
   // ---------------------------------------------------------------------------
-  // 5) Parse .className { ... } => เก็บลง classMap + merge @use
+  // 4.5) Parse @keyframe ... { ... } => ใส่ใน keyframeMap
+  // ---------------------------------------------------------------------------
+  {
+    const keyframeRegex = /@keyframe\s+([\w-]+)\s*\{([^}]*)\}/g;
+    let kMatch: RegExpExecArray | null;
+    while ((kMatch = keyframeRegex.exec(templateContent)) !== null) {
+      const kfName = kMatch[1];
+      const kfBody = kMatch[2];
+      keyframeMap[kfName] = parseKeyframeBody(kfName, kfBody);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 5) Parse .className { ... } => เก็บลง classMap + merge @use + merge keyframe
   // ---------------------------------------------------------------------------
   {
     const classRegex = /\.(\w+)(?:\([^)]*\))?\s*\{([^}]*)\}/g;
@@ -165,11 +205,26 @@ function generateGeneric(sourceCode: string): string {
 
       // (C2) parse $xxx[...] + pseudo
       parseStylesIntoSet(innerContent, classMap[clsName]);
+
+      // (C3) ตรวจว่ามีการใช้ keyframe ไหม (am[...] หรือ am-name[...])
+      {
+        const animRegex = /\bam(?:-name)?\[\s*([\w-]+)/g;
+        let animMatch: RegExpExecArray | null;
+        while ((animMatch = animRegex.exec(innerContent)) !== null) {
+          const usedKF = animMatch[1]; // ชื่อ keyframe เช่น kf2
+          if (keyframeMap[usedKF]) {
+            for (const kfVal of keyframeMap[usedKF]) {
+              // kfVal เป็นรูป 'kf2_10_bg' หรือ 'kf2_from_bg' เป็นต้น
+              classMap[clsName].add(kfVal);
+            }
+          }
+        }
+      }
     }
   }
 
   // ---------------------------------------------------------------------------
-  // 6) แยก directive @scope, @bind, @const ออกจากเนื้อหา
+  // 6) แยก directive @scope, @bind, @const, @keyframe ออกจากเนื้อหา
   // ---------------------------------------------------------------------------
   const lines = templateContent.split('\n');
   const scopeLines: string[] = [];
