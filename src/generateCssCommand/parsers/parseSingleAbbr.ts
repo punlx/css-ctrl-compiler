@@ -12,17 +12,21 @@ import { parseStateStyle } from './parseStateStyle';
 /**
  * parseSingleAbbr
  * @param abbrLine         ex. "bg[red]" or "hover(bg[red])" or "@query .box2 { ... }"
- * @param styleDef 
+ * @param styleDef
  * @param isConstContext   true => in @const or theme.define block
  * @param isQueryBlock     true => we are inside an @query block (=> disallow $variable)
  * @param isDefineContext  true => theme.define
+ * @param keyframeNameMap  (NEW) สำหรับ rename keyframe (move => app_move)
  */
 export function parseSingleAbbr(
   abbrLine: string,
   styleDef: IStyleDefinition,
   isConstContext: boolean = false,
   isQueryBlock: boolean = false,
-  isDefineContext: boolean = false
+  isDefineContext: boolean = false,
+
+  // --- ADDED FOR KEYFRAME ---
+  keyframeNameMap?: Map<string, string>
 ) {
   const trimmed = abbrLine.trim();
 
@@ -40,7 +44,7 @@ export function parseSingleAbbr(
     );
   }
 
-  // (ยังคง) ถ้าอยู่ใน @query block => ห้ามประกาศ localVar, ห้ามใช้ $variable
+  // ถ้าอยู่ใน @query block => ห้ามประกาศ localVar, ห้ามใช้ $variable
   if (isQueryBlock) {
     // ห้าม "ประกาศ" localVar
     if (/^--&[\w-]+\[/.test(trimmed)) {
@@ -61,14 +65,14 @@ export function parseSingleAbbr(
     styleDef.hasRuntimeVar = true;
   }
 
-  // ถ้ารูปแบบไม่มี "(", ให้ parseBaseStyle 
+  // ถ้ารูปแบบไม่มี "(" => parseBaseStyle
   const openParenIndex = trimmed.indexOf('(');
   if (openParenIndex === -1) {
-    parseBaseStyle(trimmed, styleDef, isConstContext, isQueryBlock);
+    parseBaseStyle(trimmed, styleDef, isConstContext, isQueryBlock, keyframeNameMap);
     return;
   }
 
-  // ถ้าเจอ prefix => เช็กว่าเป็น state/pseudo/screen/container หรือเปล่า
+  // มี prefix => เช็กว่าเป็น state/pseudo/screen/container หรือเปล่า
   const prefix = trimmed.slice(0, openParenIndex).trim();
 
   // state
@@ -93,5 +97,5 @@ export function parseSingleAbbr(
   }
 
   // ไม่เข้าเคสไหน -> parseBaseStyle
-  parseBaseStyle(trimmed, styleDef, isConstContext, isQueryBlock);
+  parseBaseStyle(trimmed, styleDef, isConstContext, isQueryBlock, keyframeNameMap);
 }

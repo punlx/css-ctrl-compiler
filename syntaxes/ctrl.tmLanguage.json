@@ -41,7 +41,7 @@
         },
         {
           "name": "support.type.property-name.css",
-          "match": "(?<=(@bind|@scope|@const)\\s)([\\w-]+)"
+          "match": "(?<=(@bind|@scope|@const|@keyframe)\\s)([\\w-]+)"
         },
         {
           "name": "support.type.property-name.css",
@@ -69,7 +69,7 @@
         },
         {
           "name": "keyword.control.at-rule.css",
-          "match": "(@scope|@bind|@const|@use|@query)"
+          "match": "(@scope|@bind|@const|@use|@query|@keyframe)"
         },
         {
           "name": "keyword.control.at-rule.media.css",

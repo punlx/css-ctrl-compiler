@@ -45,10 +45,6 @@ export interface INestedQueryNode {
   rawLines: string[];
   styleDef: IStyleDefinition;
   children: INestedQueryNode[];
-
-  // เราอาจจะ parse แล้วใส่ styleDef ไว้ตรงนี้ก็ได้
-  // แต่ในตัวอย่างจะเก็บ styleDef ในขั้น process แล้วผูกใน object อื่น
-  // เลยยังไม่ได้ใส่ตรงนี้
 }
 
 /** directive */
@@ -65,4 +61,20 @@ export interface IClassBlock {
 export interface IConstBlock {
   name: string;
   styleDef: IStyleDefinition;
+}
+
+// --- ADDED FOR KEYFRAME ---
+// IKeyframeBlock: โครงสร้างสำหรับเก็บข้อมูล keyframe ที่ parse ได้
+export interface IKeyframeBlock {
+  name: string; // เช่น "move"
+  rawBlock: string; // เนื้อหาดิบ ๆ ภายใน { ... } (ไว้ไป parse ต่อในขั้นถัดไป)
+}
+
+// --- CHANGED FOR KEYFRAME ---
+// เพิ่ม keyframeBlocks ใน return type
+export interface IParseDirectivesResult {
+  directives: IParsedDirective[];
+  classBlocks: IClassBlock[];
+  constBlocks: IConstBlock[];
+  keyframeBlocks: IKeyframeBlock[]; // เพิ่ม
 }

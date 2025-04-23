@@ -8,9 +8,10 @@ import { ensureScopeUnique } from './utils/ensureScopeUnique';
 import { parseDirectives } from './parsers/parseDirectives';
 import { processClassBlocks } from './helpers/processClassBlocks';
 import { handleBindDirectives } from './utils/handleBindDirectives';
-// (REMOVED) No more direct transformVariables or transformLocalVariables here
 import { buildCssText } from './builders/buildCssText';
 import { IStyleDefinition } from './types';
+
+import { buildKeyframeNameMap, buildKeyframesCSS } from './parsers/paseKeyFrameBody';
 
 /**
  * globalDefineMap – ถ้าต้องการฟีเจอร์ @const / theme.define ข้ามไฟล์
@@ -23,7 +24,14 @@ export const globalDefineMap: Record<string, Record<string, IStyleDefinition>> =
  ************************************************************/
 export function generateCssCtrlCssFromSource(sourceText: string): string {
   // (A) parse directives
-  const { directives, classBlocks, constBlocks } = parseDirectives(sourceText);
+  const {
+    directives,
+    classBlocks,
+    constBlocks,
+
+    // --- ADDED FOR KEYFRAME ---
+    keyframeBlocks,
+  } = parseDirectives(sourceText);
 
   // (B) หาค่า scope จาก @scope
   const scopeDir = directives.find((d) => d.name === 'scope');
@@ -37,14 +45,29 @@ export function generateCssCtrlCssFromSource(sourceText: string): string {
     constMap.set(c.name, c.styleDef);
   }
 
+  // --- NEW STEP for Keyframe NameMap ---
+  // ก่อน parse .className blocks เราต้องรู้ว่า kf1 => app_kf1
+  // เพื่อเอาไป rename ตอนเจอ abbr "am[kf1 ...]" ใน class blocks
+  const keyframeNameMap = buildKeyframeNameMap(keyframeBlocks, scopeName);
+
   // (D) parse .className blocks => Map<classDisplayKey, styleDef> + shortName->final
-  const { classMap: classNameDefs, shortNameToFinal } = processClassBlocks(scopeName, classBlocks, constMap);
+  //    (ส่ง keyframeNameMap เข้าไปด้วย)
+  const { classMap: classNameDefs, shortNameToFinal } = processClassBlocks(
+    scopeName,
+    classBlocks,
+    constMap,
+    keyframeNameMap // <-- ส่งเข้าไป
+  );
 
   // (E) handle @bind
   handleBindDirectives(scopeName, directives, classNameDefs);
 
-  // (F) สร้าง CSS (ไม่ transform variables ซ้ำอีก เพราะเราทำแล้วใน processClassBlocks)
-  let finalCss = '';
+  // (F) สร้าง CSS ของ keyframe blocks
+  //     (เรารู้ finalName ของแต่ละ kf แล้วจาก keyframeNameMap)
+  const keyframeCss = buildKeyframesCSS(keyframeBlocks, keyframeNameMap);
+
+  // (G) สร้าง CSS ของ class ต่าง ๆ (ตามลำดับ)
+  let finalCss = keyframeCss; // วาง keyframe ก่อน
   for (const [displayKey, styleDef] of classNameDefs.entries()) {
     finalCss += buildCssText(displayKey, styleDef, shortNameToFinal, scopeName);
   }

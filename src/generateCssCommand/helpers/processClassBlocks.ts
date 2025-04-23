@@ -22,7 +22,10 @@ import { makeFinalName } from '../utils/sharedScopeUtils';
 function parseNestedQueryDef(
   queries: any[],
   parentDef: IStyleDefinition,
-  constMap: Map<string, IStyleDefinition>
+  constMap: Map<string, IStyleDefinition>,
+
+  // --- ADDED for Keyframe rename ---
+  keyframeNameMap?: Map<string, string>
 ) {
   const out = [];
   for (const node of queries) {
@@ -57,12 +60,13 @@ function parseNestedQueryDef(
     }
 
     for (const qLn of normalLines) {
-      parseSingleAbbr(qLn, subDef, false, true, false);
+      // --- PASS keyframeNameMap => parseSingleAbbr
+      parseSingleAbbr(qLn, subDef, false, true, false, keyframeNameMap);
     }
 
     // recursive children
     // @ts-ignore
-    const childrenParsed = parseNestedQueryDef(node.children, subDef, constMap);
+    const childrenParsed = parseNestedQueryDef(node.children, subDef, constMap, keyframeNameMap);
 
     out.push({
       selector: node.selector,
@@ -80,7 +84,10 @@ function parseNestedQueryDef(
 export function processClassBlocks(
   scopeName: string,
   classBlocks: IClassBlock[],
-  constMap: Map<string, IStyleDefinition>
+  constMap: Map<string, IStyleDefinition>,
+
+  // --- ADDED for Keyframe rename ---
+  keyframeNameMap?: Map<string, string>
 ): {
   classMap: Map<string, IStyleDefinition>;
   shortNameToFinal: Map<string, string>;
@@ -122,10 +129,17 @@ export function processClassBlocks(
     }
 
     for (const ln of normalLines) {
-      parseSingleAbbr(ln, classStyleDef);
+      // --- PASS keyframeNameMap => parseSingleAbbr => เพื่อ rename keyframe
+      parseSingleAbbr(ln, classStyleDef, false, false, false, keyframeNameMap);
     }
 
-    classStyleDef.nestedQueries = parseNestedQueryDef(queries, classStyleDef, constMap);
+    // parse nested queries (if any)
+    classStyleDef.nestedQueries = parseNestedQueryDef(
+      queries,
+      classStyleDef,
+      constMap,
+      keyframeNameMap
+    );
 
     if ((classStyleDef as any)._usedLocalVars) {
       for (const usedVar of (classStyleDef as any)._usedLocalVars) {
@@ -136,8 +150,6 @@ export function processClassBlocks(
         }
       }
     }
-
-    // (REMOVED) เดิมเคยมี comment "ถ้าใช้ scope=hash => makeFinalName..."
 
     const finalKey = makeFinalName(scopeName, clsName, block.body);
 

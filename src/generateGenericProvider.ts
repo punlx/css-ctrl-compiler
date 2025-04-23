@@ -202,7 +202,7 @@ function generateGeneric(sourceCode: string): string {
         i++;
         continue;
       }
-      if (trimmed.startsWith('@const ')) {
+      if (trimmed.startsWith('@const ') || trimmed.startsWith('@keyframe ')) {
         const blockLines: string[] = [];
         blockLines.push(trimmed);
         i++;

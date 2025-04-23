@@ -2,17 +2,23 @@
 
 import { createEmptyStyleDef } from '../helpers/createEmptyStyleDef';
 import { parseClassBlocksWithBraceCounting } from '../helpers/parseClassBlocksWithBraceCounting';
-import { IClassBlock, IConstBlock, IParsedDirective } from '../types';
+import {
+  IClassBlock,
+  IConstBlock,
+  IParsedDirective,
+  IParseDirectivesResult,
+  IKeyframeBlock,
+} from '../types';
 import { parseSingleAbbr } from './parseSingleAbbr';
 
-export function parseDirectives(text: string): {
-  directives: IParsedDirective[];
-  classBlocks: IClassBlock[];
-  constBlocks: IConstBlock[];
-} {
+export function parseDirectives(text: string): IParseDirectivesResult {
   const directives: IParsedDirective[] = [];
   const classBlocks: IClassBlock[] = [];
   const constBlocks: IConstBlock[] = [];
+
+  // --- ADDED FOR KEYFRAME ---
+  // เก็บ @keyframe
+  const keyframeBlocks: IKeyframeBlock[] = [];
 
   let newText = text;
 
@@ -39,7 +45,28 @@ export function parseDirectives(text: string): {
     newText = newText.replace(fullMatch, '').trim();
   }
 
-  // (2) parse directive top-level (@scope, @bind, etc.)
+  // --- ADDED FOR KEYFRAME ---
+  // (2) parse @keyframe <name> { ... }
+  const keyframeRegex = /^[ \t]*@keyframe\s+([\w-]+)\s*\{([\s\S]*?)\}/gm;
+  let keyMatch: RegExpExecArray | null;
+  while ((keyMatch = keyframeRegex.exec(newText)) !== null) {
+    const fullMatch = keyMatch[0];
+    const keyName = keyMatch[1];
+    const rawBlock = keyMatch[2];
+
+    // สร้าง IKeyframeBlock เก็บชื่อ + เนื้อหาดิบ
+    keyframeBlocks.push({
+      name: keyName,
+      rawBlock,
+    });
+
+    // ตัดส่วนนี้ทิ้งจาก newText
+    newText = newText.replace(fullMatch, '').trim();
+    // เนื่องจากเราเปลี่ยน newText => reset regex
+    keyframeRegex.lastIndex = 0;
+  }
+
+  // (3) parse directive top-level (@scope, @bind, etc.)
   const directiveRegex = /^[ \t]*@([\w-]+)\s+([^\r\n]+)/gm;
   let dMatch: RegExpExecArray | null;
   directiveRegex.lastIndex = 0;
@@ -67,11 +94,18 @@ export function parseDirectives(text: string): {
     directiveRegex.lastIndex = 0;
   }
 
-  // (3) parse .className { ... }
+  // (4) parse .className { ... }
   const blocks = parseClassBlocksWithBraceCounting(newText);
   for (const blk of blocks) {
     classBlocks.push(blk);
   }
 
-  return { directives, classBlocks, constBlocks };
+  return {
+    directives,
+    classBlocks,
+    constBlocks,
+
+    // --- ADDED FOR KEYFRAME ---
+    keyframeBlocks,
+  };
 }

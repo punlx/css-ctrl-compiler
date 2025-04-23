@@ -10,12 +10,18 @@ import { IStyleDefinition } from '../types';
 import { mergeStyleDef } from '../utils/mergeStyleDef';
 import { parseSingleAbbr } from './parseSingleAbbr';
 
-/** parseBaseStyle **/
+/**
+ * parseBaseStyle
+ *
+ * (CHANGED FOR KEYFRAME) เพิ่ม parameter keyframeNameMap สำหรับ rename keyframe name
+ */
 export function parseBaseStyle(
   abbrLine: string,
   styleDef: IStyleDefinition,
   isConstContext: boolean = false,
-  isQueryBlock: boolean = false
+  isQueryBlock: boolean = false,
+  // --- ADDED FOR KEYFRAME ---
+  keyframeNameMap?: Map<string, string>
 ) {
   const { line: abbrLineNoBang, isImportant } = detectImportantSuffix(abbrLine);
   if (isConstContext && isImportant) {
@@ -41,8 +47,6 @@ export function parseBaseStyle(
   // -----------------------------------------------------------------------
   if (styleAbbr.startsWith('--&')) {
     // ประกาศ local var
-
-    // (REMOVED) เดิมเคยมีโค้ด if (isConstContext) throw error. ตอนนี้ยกเลิกเพื่ออนุญาตใน @const
     if (isQueryBlock) {
       throw new Error(
         `[CSS-CTRL-ERR] local var "${styleAbbr}" not allowed to declare in @query block. (line: ${abbrLine})`
@@ -59,7 +63,6 @@ export function parseBaseStyle(
       );
     }
 
-    // เช็คว่าชื่อ var ซ้ำกับ abbrMap key หรือไม่
     if (localVarName in abbrMap) {
       throw new Error(
         `[CSS-CTRL-ERR] local varriable name "--&${localVarName}" conflicts with abbreviation of style "${localVarName}: ${abbrMap[localVarName]}". Please rename.`
@@ -83,21 +86,19 @@ export function parseBaseStyle(
   // -----------------------------------------------------------------------
   if (styleAbbr.startsWith('--')) {
     // e.g. --color[red]
-    // ไม่ rename ใด ๆ => ออกมาเป็น --color: red;
-    // สมมุติอนุญาตในทุกบริบท (รวม @query, @const)
-    // ถ้าต้องการห้ามใน @const => throw error ได้
+    if (!styleAbbr.startsWith('--&')) {
+      // สมมุติอนุญาตในทุกบริบท (รวม @query, @const) ตามโค้ดเก่า
+      const rawName = styleAbbr.slice(2);
+      if (!rawName) {
+        throw new Error(`[CSS-CTRL-ERR] Missing local var name after "--". Found: "${abbrLine}"`);
+      }
 
-    const rawName = styleAbbr.slice(2); // e.g. "color"
-    if (!rawName) {
-      throw new Error(`[CSS-CTRL-ERR] Missing local var name after "--". Found: "${abbrLine}"`);
+      if (!(styleDef as any).plainLocalVars) {
+        (styleDef as any).plainLocalVars = {};
+      }
+      (styleDef as any).plainLocalVars[`--${rawName}`] = convertCSSVariable(propValue);
+      return;
     }
-
-    // สร้าง plainLocalVars ถ้ายังไม่มี
-    if (!(styleDef as any).plainLocalVars) {
-      (styleDef as any).plainLocalVars = {};
-    }
-    (styleDef as any).plainLocalVars[`--${rawName}`] = convertCSSVariable(propValue);
-    return;
   }
 
   // -----------------------------------------------------------------------
@@ -145,7 +146,6 @@ export function parseBaseStyle(
       // ใส่ base prop => "var(--realAbbr)"
       const varRef = `var(--${realAbbr})${isImportant ? ' !important' : ''}`;
 
-      // (NEW) ถ้า def เป็น array => set หลาย property
       if (Array.isArray(def)) {
         for (const propName of def) {
           styleDef.base[propName] = varRef;
@@ -169,8 +169,31 @@ export function parseBaseStyle(
     }
     const tokens = globalTypographyDict[typKey].split(/\s+/);
     for (const tk of tokens) {
-      parseSingleAbbr(tk, styleDef, false, isQueryBlock, false);
+      parseSingleAbbr(tk, styleDef, false, isQueryBlock, false, keyframeNameMap);
     }
+    return;
+  }
+
+  // -----------------------------------------------------------------------
+  // (CHANGED FOR KEYFRAME)
+  // (D*) เช็คเคส abbr = "am" / "am-name" => ถ้า propValue เริ่มต้นด้วย keyframeName => rename
+  // -----------------------------------------------------------------------
+  if (styleAbbr === 'am' || styleAbbr === 'am-name') {
+    // ตัวอย่าง: am[move 1s ease]
+    // ให้ split ด้วยช่องว่าง แล้วดูคำแรก
+    const tokens = propValue.trim().split(/\s+/);
+    if (tokens.length > 0 && keyframeNameMap) {
+      const firstToken = tokens[0];
+      // ถ้ามีใน keyframeNameMap => rename
+      if (keyframeNameMap.has(firstToken)) {
+        tokens[0] = keyframeNameMap.get(firstToken)!;
+      }
+    }
+    // สร้าง value กลับ
+    const finalVal = tokens.join(' ') + (isImportant ? ' !important' : '');
+    // property = animation / animation-name
+    const cssProp = styleAbbr === 'am' ? 'animation' : 'animation-name';
+    styleDef.base[cssProp] = finalVal;
     return;
   }
 
@@ -178,7 +201,6 @@ export function parseBaseStyle(
   // (D) ถ้าไม่เจอใน abbrMap => อาจเป็น define?
   // -----------------------------------------------------------------------
   if (!(styleAbbr in abbrMap)) {
-    // อาจเป็น define
     if (styleAbbr in globalDefineMap) {
       const tokens = propValue.split(/\s+/).filter(Boolean);
       if (tokens.length > 1) {
@@ -219,7 +241,6 @@ export function parseBaseStyle(
 
     let finalVal = convertCSSVariable(val2);
     if (val2.includes('--&')) {
-      // local var usage
       if (!(styleDef as any)._usedLocalVars) {
         (styleDef as any)._usedLocalVars = new Set<string>();
       }
@@ -232,7 +253,6 @@ export function parseBaseStyle(
       finalVal += isImportant ? ' !important' : '';
     }
 
-    // (NEW) ถ้า def เป็น array => set หลาย property
     if (Array.isArray(def)) {
       for (const propName of def) {
         styleDef.base[propName] = finalVal;
