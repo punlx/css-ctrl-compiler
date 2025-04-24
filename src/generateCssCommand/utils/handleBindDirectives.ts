@@ -5,12 +5,15 @@ import { IParsedDirective, IStyleDefinition } from '../types';
 /**
  * handleBindDirectives:
  *   - เช็ค @bind <bindKey> .class1 .class2 ...
- *   - เดิมเคยมีเคส scope=hash => ข้ามการตรวจ แต่ตอนนี้ลบออกแล้ว
+ *   - เพิ่มเงื่อนไข:
+ *     1) ถ้าคลาสชื่อซ้ำใน .ctrl.ts และ theme.class(...) => throw error
+ *     2) ถ้าไม่พบคลาสในทั้งสอง => throw error
  */
 export function handleBindDirectives(
   scopeName: string,
   directives: IParsedDirective[],
-  classMap: Map<string, IStyleDefinition>
+  classMap: Map<string, IStyleDefinition>,
+  themeClassSet: Set<string> // ไม่มี default
 ) {
   const localBindKeys = new Set<string>();
 
@@ -37,8 +40,6 @@ export function handleBindDirectives(
         const shortCls = ref.slice(1);
 
         let finalKey: string;
-
-        // (REMOVED) case "hash" ออก
         if (scopeName === 'none') {
           finalKey = shortCls;
         } else {
@@ -46,16 +47,26 @@ export function handleBindDirectives(
         }
 
         // กัน bindKey ชนกับคลาส
-        // (เดิมเคยข้ามในกรณี hash; ตอนนี้ลบออก)
         if (classMap.has(`${scopeName}_${bindKey}`)) {
           throw new Error(
             `[CSS-CTRL-ERR] @bind key "${bindKey}" conflicts with existing class ".${bindKey}" in scope="${scopeName}".`
           );
         }
 
-        if (!classMap.has(finalKey)) {
+        // เช็คว่าอยู่ใน ctrl.ts หรือใน theme.class
+        const isLocal = classMap.has(finalKey);
+        const isTheme = themeClassSet.has(shortCls);
+
+        // (1) ถ้ามีทั้งสอง => conflict
+        if (isLocal && isTheme) {
           throw new Error(
-            `[CSS-CTRL-ERR] @bind referencing ".${shortCls}" but that class is not defined. (finalKey="${finalKey}")`
+            `[CSS-CTRL-ERR] Conflict: class ".${shortCls}" is declared in both .ctrl.ts and theme.class(...)`
+          );
+        }
+        // (2) ถ้าไม่มีเลย => ก็ error
+        if (!isLocal && !isTheme) {
+          throw new Error(
+            `[CSS-CTRL-ERR] No class named ".${shortCls}" found in either .ctrl.ts or theme.class(...)`
           );
         }
       }

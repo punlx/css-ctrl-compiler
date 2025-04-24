@@ -12,6 +12,7 @@ import { buildCssText } from './builders/buildCssText';
 import { IStyleDefinition } from './types';
 
 import { buildKeyframeNameMap, buildKeyframesCSS } from './parsers/paseKeyFrameBody';
+import { parseThemeClassFull } from '../parseTheme'; // <--- สำหรับ parse theme.class(...)
 
 /**
  * globalDefineMap – ถ้าต้องการฟีเจอร์ @const / theme.define ข้ามไฟล์
@@ -28,7 +29,6 @@ export function generateCssCtrlCssFromSource(sourceText: string): string {
     directives,
     classBlocks,
     constBlocks,
-
     // --- ADDED FOR KEYFRAME ---
     keyframeBlocks,
   } = parseDirectives(sourceText);
@@ -50,17 +50,19 @@ export function generateCssCtrlCssFromSource(sourceText: string): string {
   // เพื่อเอาไป rename ตอนเจอ abbr "am[kf1 ...]" ใน class blocks
   const keyframeNameMap = buildKeyframeNameMap(keyframeBlocks, scopeName);
 
-  // (D) parse .className blocks => Map<classDisplayKey, styleDef> + shortName->final
+  // (D) parse .className blocks => Map<classDisplayKey, styleDef> + shortNameToFinal
   //    (ส่ง keyframeNameMap เข้าไปด้วย)
   const { classMap: classNameDefs, shortNameToFinal } = processClassBlocks(
     scopeName,
     classBlocks,
     constMap,
-    keyframeNameMap // <-- ส่งเข้าไป
+    keyframeNameMap
   );
 
-  // (E) handle @bind
-  handleBindDirectives(scopeName, directives, classNameDefs);
+  // (E) handle @bind => ต้องการ 4 arguments
+  // => เราเรียกฟังก์ชัน getThemeClassSet() เพื่อนำรายชื่อ class จาก theme.class(...) มาสร้าง Set
+  const themeClassSet = getThemeClassSet();
+  handleBindDirectives(scopeName, directives, classNameDefs, themeClassSet);
 
   // (F) สร้าง CSS ของ keyframe blocks
   //     (เรารู้ finalName ของแต่ละ kf แล้วจาก keyframeNameMap)
@@ -132,4 +134,27 @@ export async function createCssCtrlCssFile(doc: vscode.TextDocument) {
 
   // (3) เขียนไฟล์ .ctrl.css
   fs.writeFileSync(newCssFilePath, generatedCss, 'utf8');
+}
+
+/**
+ * getThemeClassSet:
+ * - สแกน workspace หาไฟล์ ctrl.theme.ts (ถ้ามี)
+ * - เรียก parseThemeClassFull => ได้ object { box1: "...", box2:"..." } จาก theme.class(...)
+ * - คืนเป็น Set<string> ของ key
+ */
+function getThemeClassSet(): Set<string> {
+  const folders = vscode.workspace.workspaceFolders;
+  if (!folders || folders.length === 0) {
+    return new Set();
+  }
+
+  // ลองสมมุติว่าไฟล์ ctrl.theme.ts อยู่ที่ root folder
+  const rootPath = folders[0].uri.fsPath;
+  const themeFilePath = path.join(rootPath, 'ctrl.theme.ts');
+  if (!fs.existsSync(themeFilePath)) {
+    return new Set();
+  }
+
+  const classMap = parseThemeClassFull(themeFilePath); // => { box1:"...", box2:"..." }
+  return new Set(Object.keys(classMap));
 }

@@ -5,6 +5,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { abbrMap } from './constants/abbrMap'; // <-- import มาให้แล้ว เอาไปใช้เลย
 
+// (NEW) import เพื่อใช้ parseSingleAbbr, createEmptyStyleDef, buildCssText
+import { parseSingleAbbr } from './parsers/parseSingleAbbr';
+import { createEmptyStyleDef } from './helpers/createEmptyStyleDef';
+import { buildCssText } from './builders/buildCssText';
+
 // ---------------------- simulate from theme.ts ----------------------
 function generatePaletteCSS(colors: string[][]): string {
   const modes = colors[0];
@@ -118,11 +123,13 @@ function generateVariableCSS(variableMap: Record<string, string>): string {
 }
 
 // ---------------------------------------------------------------
-
 interface IParseResult {
   palette: string[][] | null;
   variable: Record<string, string>;
   keyframe: Record<string, string>;
+
+  // (NEW) เพิ่ม classMap สำหรับ theme.class
+  classMap?: Record<string, string>;
 }
 
 function parseCssCtrlThemeSource(sourceText: string): IParseResult {
@@ -130,6 +137,7 @@ function parseCssCtrlThemeSource(sourceText: string): IParseResult {
     palette: null,
     variable: {},
     keyframe: {},
+    classMap: {}, // เริ่มเป็น obj ว่าง
   };
 
   const paletteRegex = /theme\.palette\s*\(\s*\[([\s\S]*?)\]\s*\)/;
@@ -179,6 +187,27 @@ function parseCssCtrlThemeSource(sourceText: string): IParseResult {
     }
   }
 
+  // (NEW) parse theme.class(...)
+  const classRegex = /theme\.class\s*\(\s*\{\s*([\s\S]*?)\}\s*\)/m;
+  const classMatch = classRegex.exec(sourceText);
+  if (classMatch) {
+    const rawBody = classMatch[1];
+    const itemRegex = /(['"]?)([A-Za-z_-][\w-]*)\1\s*:\s*(?:`([^`]*)`|['"]([^'"]*)['"])/g;
+    let im: RegExpExecArray | null;
+    while ((im = itemRegex.exec(rawBody)) !== null) {
+      const className = im[2];
+      const dsl = im[3] || im[4] || '';
+      // เช็ค disallowed ($, --&, @use, @query) ที่นี่ก็ได้
+      if (/\$/.test(dsl) || /--&/.test(dsl) || /@use/.test(dsl) || /@query/.test(dsl)) {
+        throw new Error(
+          `[CSS-CTRL-ERR] theme.class(...) not allowed to use $var, --&var, @use, or @query. Found in class "${className}".`
+        );
+      }
+      // ใส่ลง result.classMap
+      result.classMap![className] = dsl.trim();
+    }
+  }
+
   return result;
 }
 
@@ -196,7 +225,34 @@ function generateCssCtrlThemeCssFromSource(sourceText: string): string {
     css += parseKeyframeString(kName, parsed.keyframe[kName]);
   }
 
+  // (NEW) ถ้ามี classMap => generate class CSS
+  if (parsed.classMap && Object.keys(parsed.classMap).length > 0) {
+    css += generateThemeClassCSS(parsed.classMap);
+  }
+
   return css;
+}
+
+// (NEW) generateThemeClassCSS: parse DSL -> build IStyleDefinition -> buildCssText(scope=none)
+function generateThemeClassCSS(classMap: Record<string, string>): string {
+  let outCss = '';
+  for (const className in classMap) {
+    const dslStr = classMap[className];
+    // สร้าง IStyleDefinition
+    const styleDef = createEmptyStyleDef();
+
+    // แบ่ง token ตาม regex เคยใช้
+    const tokens = dslStr.split(/ (?=[^\[\]]*(?:\[|$))/);
+    for (const tk of tokens) {
+      parseSingleAbbr(tk, styleDef, false, false, false);
+    }
+
+    // build เป็น CSS
+    // scope=none => ให้เป็น .className ตรง ๆ, shortNameToFinal ใช้ new Map()
+    const classCss = buildCssText(className, styleDef, new Map(), 'none');
+    outCss += classCss;
+  }
+  return outCss;
 }
 
 export async function createCssCtrlThemeCssFile(doc: vscode.TextDocument) {

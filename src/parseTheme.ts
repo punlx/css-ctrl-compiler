@@ -1,5 +1,3 @@
-// src/parseTheme.ts
-
 import * as fs from 'fs';
 
 /**
@@ -268,4 +266,55 @@ export function parseThemeDefineFull(
   }
 
   return res;
+}
+
+/**
+ * parseThemeClassFull:
+ *  - หา theme.class({...}) => เช่น
+ *    theme.class({
+ *      box1: `bg[red] c[white] hover(bg[blue]) ...`,
+ *      box2: `bg[blue] c[pink] screen(...)`
+ *    });
+ *  - คืนเป็น object { box1: "bg[red] c[white] hover(bg[blue])", box2: "..." }
+ *  - มีการเช็คชื่อ class ว่าต้องไม่ขึ้นต้นด้วยตัวเลข หรือ invalid
+ *  - มีการเช็คว่าห้ามมี $, --&, @use, @query
+ */
+export function parseThemeClassFull(themeFilePath: string): Record<string, string> {
+  const classMap: Record<string, string> = {};
+  if (!fs.existsSync(themeFilePath)) return classMap;
+
+  const content = fs.readFileSync(themeFilePath, 'utf8');
+  const mainMatch = /theme\.class\s*\(\s*\{\s*([\s\S]*?)\}\s*\)/m.exec(content);
+  if (!mainMatch) {
+    return classMap; // ไม่มี theme.class(...)
+  }
+
+  // rawBody ภายใน {}
+  const rawBody = mainMatch[1];
+
+  // pattern จับคู่คีย์ + DSL: รองรับทั้งแบบ 'box1': "...", box2: `...` แบบ multiline
+  // ตรวจสอบชื่อ class => ต้องขึ้นต้นด้วย [A-Za-z_-] แล้วตามด้วย [\w-]*
+  // ถ้าขึ้นต้นด้วยตัวเลข => จะ match ไม่ได้
+  const itemRegex = /(['"]?)([A-Za-z_-][\w-]*)\1\s*:\s*(?:`([^`]*)`|['"]([^'"]*)['"])/g;
+  let itemMatch: RegExpExecArray | null;
+  while ((itemMatch = itemRegex.exec(rawBody)) !== null) {
+    const className = itemMatch[2]; // ชื่อ key
+    const dslContent = itemMatch[3] || itemMatch[4] || '';
+
+    // 1) pre-scan ห้ามมี $, --&, @use, @query
+    if (
+      /\$/.test(dslContent) ||
+      /--&/.test(dslContent) ||
+      /@use/.test(dslContent) ||
+      /@query/.test(dslContent)
+    ) {
+      throw new Error(
+        `[CSS-CTRL-ERR] theme.class(...) not allowed to use $var, --&var, @use, or @query. Found in class "${className}".`
+      );
+    }
+
+    classMap[className] = dslContent.trim();
+  }
+
+  return classMap;
 }
