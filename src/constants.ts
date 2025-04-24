@@ -1,3 +1,4 @@
+import { pluginContainerConfigSuggestion } from './generateCssCommand/constants/pluginContainerConfig';
 import { pluginMapSuggestionList } from './generateCssCommand/constants/pluginStatesConfig';
 
 // src/constants.ts
@@ -1328,6 +1329,7 @@ export const colorAbbrSet = new Set([
 export const abbrStyleMapName: Record<string, string> = {
   ...pluginMapSuggestionList,
   ...moreStyleForSuggestion,
+  ...pluginContainerConfigSuggestion,
   /**
    * Multiple Style
    */
@@ -1427,9 +1429,9 @@ export const abbrStyleMapName: Record<string, string> = {
   /********************************************
    * Container Query
    ********************************************/
-  'container-type': 'container-type',
-  container: 'container',
-  'container-name': 'container-name',
+  'ctn-type': 'container-type',
+  ctn: 'container',
+  'ctn-name': 'container-name',
 
   /********************************************
    * Columns / Gap

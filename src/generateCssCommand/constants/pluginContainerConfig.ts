@@ -11,3 +11,10 @@ export const pluginContainerConfig: Record<string, string> = {
   'snackbar-container': 'snackbarPluginContainer',
   'popover-container': 'popoverPluginContainer',
 };
+
+export const pluginContainerConfigSuggestion = {
+  'drawer-container': 'drawer-container (container)',
+  'dialog-container': 'dialog-container (container)',
+  'snackbar-container': 'snackbar-container (container)',
+  'popover-container': 'popover-container (container)',
+};
