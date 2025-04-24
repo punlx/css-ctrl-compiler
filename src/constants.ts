@@ -1,3 +1,5 @@
+import { pluginMapSuggestionList } from './generateCssCommand/constants/pluginStatesConfig';
+
 // src/constants.ts
 export const cssValues: Record<string, string[]> = {
   all: ['initial', 'inherit', 'unset', 'revert', 'revert-layer'],
@@ -1324,6 +1326,7 @@ export const colorAbbrSet = new Set([
 ]);
 
 export const abbrStyleMapName: Record<string, string> = {
+  ...pluginMapSuggestionList,
   ...moreStyleForSuggestion,
   /**
    * Multiple Style

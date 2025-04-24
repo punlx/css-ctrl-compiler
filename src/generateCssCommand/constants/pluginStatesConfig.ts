@@ -20,13 +20,27 @@ export const pluginStatesConfig: Record<string, Record<string, string>> = {
   // คุณสามารถเพิ่ม plugin อื่น ๆ ได้ในรูปแบบเดียวกัน
 };
 
-export const pluginStatePseudos = [
-  'option-active',
-  'option-selected',
-  'option-unselected',
-  'option-disabled',
-  'accordion-active',
-  'accordion-expanded',
-  'accordion-collapsed',
-  'accordion-disabled',
-];
+const pluginStates = Object.entries(pluginStatesConfig).flatMap(([key, val]) => {
+  return Object.entries(val).flatMap(([key2, val2]) => {
+    const name = `${key}-${key2}`;
+    return {
+      pseudos: `:${name}`,
+      arrMapSuggestion: {
+        [name]: `${name} (state)`,
+      },
+    };
+  });
+});
+
+const pluginMapSuggestion = () => {
+  const map: Record<string, string> = {};
+  for (let index = 0; index < pluginStates.length; index++) {
+    const element = pluginStates[index].arrMapSuggestion;
+    const [[key, val]] = Object.entries(element);
+    map[key] = val;
+  }
+  return map;
+};
+
+export const pluginMapSuggestionList = pluginMapSuggestion();
+export const pluginStatePseudos = pluginStates.map((res) => res.pseudos);
