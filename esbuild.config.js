@@ -6,7 +6,7 @@ require('esbuild')
     outfile: 'out/extension.js',
     platform: 'node',
     format: 'cjs',
-    target: ['node14'],
+    target: ['node18'],
     external: ['vscode'], // สำคัญ! อย่า bundle vscode API
     minify: true,
   })
