@@ -15,7 +15,9 @@ export function buildCssText(
 ): string {
   let cssText = '';
 
+  // --------------------------------------------------------------------
   // rootVars
+  // --------------------------------------------------------------------
   if (styleDef.rootVars) {
     let varBlock = '';
     for (const varName in styleDef.rootVars) {
@@ -39,7 +41,7 @@ export function buildCssText(
     }
   }
 
-  // (C) base properties
+  // (B) base properties
   if (Object.keys(styleDef.base).length > 0) {
     for (const prop in styleDef.base) {
       const replacedVal = replaceLocalVarUsage(styleDef.base[prop], displayName);
@@ -50,7 +52,9 @@ export function buildCssText(
     cssText += `.${displayName}{${baseProps}}`;
   }
 
+  // --------------------------------------------------------------------
   // states
+  // --------------------------------------------------------------------
   for (const state in styleDef.states) {
     const obj = styleDef.states[state];
     let props = '';
@@ -61,7 +65,9 @@ export function buildCssText(
     cssText += `.${displayName}:${state}{${props}}`;
   }
 
+  // --------------------------------------------------------------------
   // screens
+  // --------------------------------------------------------------------
   for (const scr of styleDef.screens) {
     let props = '';
     for (const p in scr.props) {
@@ -71,7 +77,9 @@ export function buildCssText(
     cssText += `@media only screen and ${scr.query}{.${displayName}{${props}}}`;
   }
 
+  // --------------------------------------------------------------------
   // containers
+  // --------------------------------------------------------------------
   for (const ctnr of styleDef.containers) {
     let props = '';
     for (const p in ctnr.props) {
@@ -81,12 +89,13 @@ export function buildCssText(
     cssText += `@container ${ctnr.query}{.${displayName}{${props}}}`;
   }
 
+  // --------------------------------------------------------------------
   // pseudos
+  // --------------------------------------------------------------------
   if (styleDef.pseudos) {
     for (const pseudoKey in styleDef.pseudos) {
       const pseudoObj = styleDef.pseudos[pseudoKey];
       if (!pseudoObj) continue;
-
       let pseudoProps = '';
       for (const prop in pseudoObj) {
         const replacedVal = replaceLocalVarUsage(pseudoObj[prop], displayName);
@@ -96,14 +105,18 @@ export function buildCssText(
     }
   }
 
-  // (NEW) nestedQueries => recursive
+  // --------------------------------------------------------------------
+  // nestedQueries => recursive
+  // --------------------------------------------------------------------
   if (styleDef.nestedQueries && styleDef.nestedQueries.length > 0) {
     for (const nq of styleDef.nestedQueries) {
       cssText += buildNestedQueryCss(displayName, nq, displayName, shortNameToFinal, scopeName);
     }
   }
 
-  // (NEW) pluginStates ถ้ามี
+  // --------------------------------------------------------------------
+  // pluginStates ถ้ามี
+  // --------------------------------------------------------------------
   if ((styleDef as any).pluginStates) {
     const pluginObj = (styleDef as any).pluginStates;
     for (const funcName in pluginObj) {
@@ -113,11 +126,15 @@ export function buildCssText(
         const replacedVal = replaceLocalVarUsage(props[p], displayName);
         pluginProps += `${p}:${replacedVal};`;
       }
-      cssText += `.${displayName}.${classAttr}{${pluginProps}}`;
+      // แก้ให้ตรวจสอบก่อนว่า classAttr เริ่มด้วย '.' หรือ '[' เพื่อไม่ขึ้นต้นด้วยจุดซ้ำ
+      const finalSelector = joinSelector(`.${displayName}`, classAttr);
+      cssText += `${finalSelector}{${pluginProps}}`;
     }
   }
 
-  // (MODIFIED) pluginContainers ถ้ามี
+  // --------------------------------------------------------------------
+  // pluginContainers ถ้ามี
+  // --------------------------------------------------------------------
   if ((styleDef as any).pluginContainers) {
     const pcArr = (styleDef as any).pluginContainers;
     for (const pcObj of pcArr) {
@@ -126,7 +143,7 @@ export function buildCssText(
         const replacedVal = replaceLocalVarUsage(pcObj.props[p], displayName);
         containerProps += `${p}:${replacedVal};`;
       }
-      // สร้าง block => .drawerPluginContainer:has(.app_box){ ... }
+      // e.g. .drawerPluginContainer:has(.app_box){ ... }
       cssText += `.${pcObj.containerName}:has(.${displayName}){${containerProps}}`;
     }
   }
@@ -251,7 +268,11 @@ function buildRawCssText(
       for (const p in props) {
         pluginProps += `${p}:${replaceLocalVarUsage(props[p], rootDisplayName)};`;
       }
-      cssText += `${dotIfNeeded(finalSelector)}.${classAttr}{${pluginProps}}`;
+      // เดิมต่อเป็น `.${finalSelector}.${classAttr}` ทำให้บางเคสกลายเป็น .[role="..."]
+      // แก้ไขโดยใช้ joinSelector
+      const sel = dotIfNeeded(finalSelector);
+      const finalSel = joinSelector(sel, classAttr);
+      cssText += `${finalSel}{${pluginProps}}`;
     }
   }
 
@@ -297,6 +318,11 @@ function buildRawCssText(
   return cssText;
 }
 
+/**
+ * สร้าง selector สำหรับ nested block
+ * ถ้า childSel มี '&' => แทนที่ด้วย .parentSel
+ * ไม่งั้น => .parentSel childSel
+ */
 function transformNestedSelector(parentSel: string, childSel: string): string {
   const trimmed = childSel.trim();
   if (trimmed.includes('&')) {
@@ -305,11 +331,17 @@ function transformNestedSelector(parentSel: string, childSel: string): string {
   return `.${parentSel} ${trimmed}`;
 }
 
+/**
+ * ใส่จุดนำหน้า selector ถ้าจำเป็น
+ */
 function dotIfNeeded(sel: string) {
   if (sel.startsWith('.')) return sel;
   return '.' + sel;
 }
 
+/**
+ * แทนที่ LOCALVAR(xxx) => var(--xxx-displayName)
+ */
 function replaceLocalVarUsage(input: string, displayName: string): string {
   const placeholderRegex = /LOCALVAR\(([\w-]+)\)/g;
   return input.replace(placeholderRegex, (_, varName) => {
@@ -317,6 +349,9 @@ function replaceLocalVarUsage(input: string, displayName: string): string {
   });
 }
 
+/**
+ * แทนที่ SCOPE_REF(shortName) => .<finalCls>
+ */
 function maybeResolveScopeRef(
   sel: string,
   shortNameToFinal: Map<string, string>,
@@ -344,4 +379,32 @@ function maybeResolveScopeRef(
     const finalCls = shortNameToFinal.get(shortName)!;
     return `.${finalCls}${leftover}`;
   });
+}
+
+/**
+ * joinSelector:
+ *  - ถ้า pluginSelector เริ่มด้วย '.' หรือ '[' => ต่อท้าย baseSelector ทันที (ไม่เติม '.')
+ *  - ถ้าไม่ใช่ => ใส่ '.' ตรงกลาง (กรณีเป็น custom class name)
+ *
+ * ตัวอย่าง:
+ *   joinSelector('.scopename_classname', '.listboxPlugin-active')
+ *       => '.scopename_classname.listboxPlugin-active'
+ *
+ *   joinSelector('.scopename_classname', '[role="alert"]')
+ *       => '.scopename_classname[role="alert"]'
+ *
+ *   joinSelector('.scopename_classname', 'some-class')
+ *       => '.scopename_classname.some-class'
+ */
+function joinSelector(baseSelector: string, pluginSelector: string): string {
+  const trimPlugin = pluginSelector.trim();
+  if (!trimPlugin) return baseSelector;
+
+  // ถ้าเริ่มด้วย '.' หรือ '[' => ติดกันได้เลย (ไม่ใส่จุดซ้ำ)
+  if (trimPlugin.startsWith('.') || trimPlugin.startsWith('[')) {
+    return `${baseSelector}${trimPlugin}`;
+  }
+
+  // กรณีอื่น ๆ => ใส่ '.' คั่น
+  return `${baseSelector}.${trimPlugin.replace(/^\./, '')}`;
 }

@@ -16,8 +16,33 @@ export const pluginStatesConfig: Record<string, Record<string, string>> = {
     collapsed: 'accordionPlugin-collapsed[aria-expanded="false"]',
     disabled: 'accordionPlugin-disabled[aria-disabled="true"]',
   },
-
-  // คุณสามารถเพิ่ม plugin อื่น ๆ ได้ในรูปแบบเดียวกัน
+  role: {
+    option: '[role="option"]',
+    listbox: '[role="listbox"]',
+    dialog: '[role="dialog"]',
+    button: '[role="button"]',
+    checkbox: '[role="checkbox"]',
+    radio: '[role="radio"]',
+    switch: '[role="switch"]',
+    slider: '[role="slider"]',
+    progressbar: '[role="progressbar"]',
+    tab: '[role="tab"]',
+    tablist: '[role="tablist"]',
+    tabpanel: '[role="tabpanel"]',
+    textbox: '[role="textbox"]',
+    combobox: '[role="combobox"]',
+    menu: '[role="menu"]',
+    menubar: '[role="menubar"]',
+    menuitem: '[role="menuitem"]',
+    navigation: '[role="navigation"]',
+    link: '[role="link"]',
+    tooltip: '[role="tooltip"]',
+    alert: '[role="alert"]',
+    alertdialog: '[role="alertdialog"]',
+    banner: '[role="banner"]',
+    search: '[role="search"]',
+    status: '[role="status"]',
+  },
 };
 
 const pluginStates = Object.entries(pluginStatesConfig).flatMap(([key, val]) => {
@@ -26,7 +51,7 @@ const pluginStates = Object.entries(pluginStatesConfig).flatMap(([key, val]) => 
     return {
       pseudos: `:${name}`,
       arrMapSuggestion: {
-        [name]: `${name} (state)`,
+        [name]: `${name} (${key === 'role' ? 'role' : 'state'})`,
       },
     };
   });

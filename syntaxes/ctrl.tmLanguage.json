@@ -65,7 +65,7 @@
         },
         {
           "name": "entity.other.attribute-name.class.css",
-          "match": "(before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|hover|focus-within|focus-visible|focus|active|target|disabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid|option-active|option-selected|option-unselected|option-disabled|accordion-active|accordion-expanded|accordion-collapsed|accordion-disabled|accordion-collapsed|accordion-disabled|drawer-container|dialog-container|snackbar-container|popover-container)"
+          "match": "(before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|hover|focus-within|focus-visible|focus|active|target|disabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid|option-active|option-selected|option-unselected|option-disabled|accordion-active|accordion-expanded|accordion-collapsed|accordion-disabled|accordion-collapsed|accordion-disabled|drawer-container|dialog-container|snackbar-container|popover-container|role-option|role-listbox|role-dialog|role-button|role-checkbox|role-radio|role-switch|role-slider|role-progressbar|role-tab|role-tablist|role-tabpanel|role-textbox|role-combobox|role-menu|role-menubar|role-menuitem|role-navigation|role-link|role-tooltip|role-alert|role-alertdialog|role-banner|role-search|role-status)"
         },
         {
           "name": "keyword.control.at-rule.css",

@@ -117,37 +117,34 @@ function maybeTransformPluginQuerySelector(rawSelector: string): string {
   //    ถ้าเป็น "&:" => return "&.xxx"
 
   if (trimmed.startsWith(':') || trimmed.startsWith('&:')) {
-    const useDescendant = trimmed.startsWith(':'); // true => ไม่มี &, => ใส่ space
-    let namePart = '';
+    const useDescendant = trimmed.startsWith(':');
+    let namePart = useDescendant ? trimmed.slice(1) : trimmed.slice(2);
 
-    if (useDescendant) {
-      // e.g. :option-active => slice(1) => "option-active"
-      namePart = trimmed.slice(1);
-    } else {
-      // e.g. &:option-active => slice(2) => "option-active"
-      namePart = trimmed.slice(2);
-    }
-
-    // split ด้วย "-"
     const dashPos = namePart.indexOf('-');
     if (dashPos > 0) {
       const prefix = namePart.slice(0, dashPos);
       const suffix = namePart.slice(dashPos + 1);
+
+      // ดูว่าอยู่ใน pluginStatesConfig และเป็นเคส "role" หรือเปล่า
       if (pluginStatesConfig[prefix] && pluginStatesConfig[prefix][suffix]) {
         const pluginCls = pluginStatesConfig[prefix][suffix];
-        // e.g. "listboxPlugin-active" or "accordionPlugin-expanded[aria-expanded='true']"
-
-        // (NEW) check มี '['...']' หรือไม่ ถ้ามี => "listboxPlugin-active[aria-selected='true']"
-        // สร้างรูปแบบ => useDescendant => " .listboxPlugin-active[aria-selected='true']"
-        //            => !useDescendant => "&.listboxPlugin-active[aria-selected='true']"
+        // ถ้า pluginCls เป็นพวก "[role=\"...\"]" ก็ไม่ต้องใส่จุด
         if (useDescendant) {
-          // => " .xxx"
-          return ` .${pluginCls.replace(/^\./, '')}`;
+          // ถ้าเริ่มด้วย '[' => ให้ต่อเป็น " [role="..."]"
+          // ถ้าเริ่มด้วย '.' => ให้ต่อเป็น " .xxx"
+          if (pluginCls.startsWith('[')) {
+            return ` ${pluginCls}`;
+          } else {
+            return ` .${pluginCls.replace(/^\./, '')}`;
+          }
         } else {
-          // => "&.xxx"
-          // ถ้าปลายทาง pluginCls เริ่มด้วยจุดก็ลบก่อน
-          const stripped = pluginCls.replace(/^\./, '');
-          return `&.${stripped}`;
+          // ใช้ & ต่อ
+          if (pluginCls.startsWith('[')) {
+            return `&${pluginCls}`;
+          } else {
+            const stripped = pluginCls.replace(/^\./, '');
+            return `&.${stripped}`;
+          }
         }
       }
     }
