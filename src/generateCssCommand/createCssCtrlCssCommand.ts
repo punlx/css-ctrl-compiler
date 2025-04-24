@@ -13,6 +13,7 @@ import { IStyleDefinition } from './types';
 
 import { buildKeyframeNameMap, buildKeyframesCSS } from './parsers/paseKeyFrameBody';
 import { parseThemeClassFull } from '../parseTheme'; // <--- สำหรับ parse theme.class(...)
+import { formatCss } from '../formatters/formatCss';
 
 /**
  * globalDefineMap – ถ้าต้องการฟีเจอร์ @const / theme.define ข้ามไฟล์
@@ -132,8 +133,10 @@ export async function createCssCtrlCssFile(doc: vscode.TextDocument) {
     throw err;
   }
 
+  const formattedCss = await formatCss(generatedCss);
+
   // (3) เขียนไฟล์ .ctrl.css
-  fs.writeFileSync(newCssFilePath, generatedCss, 'utf8');
+  fs.writeFileSync(newCssFilePath, formattedCss, 'utf8');
 }
 
 /**
