@@ -28,12 +28,19 @@ export interface IStyleDefinition {
 
   // (NEW) เก็บโครงสร้าง Nested @query
   nestedQueries?: INestedQueryNode[];
+
+  // (MODIFIED) เพิ่ม pluginContainers สำหรับ plugin container style
+  pluginContainers?: Array<{
+    containerName: string; // เช่น 'drawerPluginContainer'
+    props: Record<string, string>;
+  }>;
+
+  // (MODIFIED) สำหรับเก็บ $var value ของแต่ละ container เช่น styleDef.varContainers['drawerPluginContainer'] = { bg: 'red', ... }
+  varContainers?: {
+    [containerClass: string]: Record<string, string>;
+  };
 }
 
-/**
- * IQueryBlock - ของเดิม
- * (อาจไม่ถูกใช้งานแล้ว แต่คงไว้เพื่อไม่ข้าม logic เดิม)
- */
 export interface IQueryBlock {
   selector: string;
   styleDef: IStyleDefinition;
@@ -64,14 +71,12 @@ export interface IConstBlock {
 }
 
 // --- ADDED FOR KEYFRAME ---
-// IKeyframeBlock: โครงสร้างสำหรับเก็บข้อมูล keyframe ที่ parse ได้
 export interface IKeyframeBlock {
   name: string; // เช่น "move"
-  rawBlock: string; // เนื้อหาดิบ ๆ ภายใน { ... } (ไว้ไป parse ต่อในขั้นถัดไป)
+  rawBlock: string; // เนื้อหาดิบ ๆ ภายใน { ... }
 }
 
 // --- CHANGED FOR KEYFRAME ---
-// เพิ่ม keyframeBlocks ใน return type
 export interface IParseDirectivesResult {
   directives: IParsedDirective[];
   classBlocks: IClassBlock[];

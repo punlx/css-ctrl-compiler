@@ -8,12 +8,12 @@ import { parseContainerStyle } from './parseContainerStyle';
 import { parsePseudoElementStyle } from './parsePseudoElementStyle';
 import { parseScreenStyle } from './parseScreenStyle';
 import { parseStateStyle } from './parseStateStyle';
-
-// (NEW) import parsePluginStateStyle
 import { parsePluginStateStyle } from './parsePluginStateStyle';
-
-// (NEW) import pluginStatesConfig
 import { pluginStatesConfig } from '../constants/pluginStatesConfig';
+
+// (MODIFIED) import pluginContainerConfig + parsePluginContainerStyle
+import { pluginContainerConfig } from '../constants/pluginContainerConfig';
+import { parsePluginContainerStyle } from './parsePluginContainerStyle';
 
 /**
  * parseSingleAbbr
@@ -77,7 +77,7 @@ export function parseSingleAbbr(
   // (NEW) เช็ค pluginState ผ่าน pluginStatesConfig แทน regex
   // 1) แยก prefix: funcName = substring ก่อน '('
   // 2) split ด้วย "-"
-  const funcName = trimmed.slice(0, openParenIndex).trim(); // e.g. "option-active"
+  const funcName = trimmed.slice(0, openParenIndex).trim();
   const dashPos = funcName.indexOf('-');
   if (dashPos > 0) {
     // prefixSuffix
@@ -93,6 +93,12 @@ export function parseSingleAbbr(
       parsePluginStateStyle(trimmed, styleDef, isConstContext, isQueryBlock, keyframeNameMap);
       return;
     }
+  }
+
+  // (MODIFIED) เช็ค pluginContainerConfig ตรง ๆ
+  if (pluginContainerConfig.hasOwnProperty(funcName)) {
+    parsePluginContainerStyle(trimmed, styleDef, isConstContext, isQueryBlock, keyframeNameMap);
+    return;
   }
 
   // state

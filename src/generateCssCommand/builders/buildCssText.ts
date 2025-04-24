@@ -117,6 +117,20 @@ export function buildCssText(
     }
   }
 
+  // (MODIFIED) pluginContainers ถ้ามี
+  if ((styleDef as any).pluginContainers) {
+    const pcArr = (styleDef as any).pluginContainers;
+    for (const pcObj of pcArr) {
+      let containerProps = '';
+      for (const p in pcObj.props) {
+        const replacedVal = replaceLocalVarUsage(pcObj.props[p], displayName);
+        containerProps += `${p}:${replacedVal};`;
+      }
+      // สร้าง block => .drawerPluginContainer:has(.app_box){ ... }
+      cssText += `.${pcObj.containerName}:has(.${displayName}){${containerProps}}`;
+    }
+  }
+
   return cssText;
 }
 
@@ -238,6 +252,18 @@ function buildRawCssText(
         pluginProps += `${p}:${replaceLocalVarUsage(props[p], rootDisplayName)};`;
       }
       cssText += `${dotIfNeeded(finalSelector)}.${classAttr}{${pluginProps}}`;
+    }
+  }
+
+  // (MODIFIED) pluginContainers ใน nested
+  if ((styleDef as any).pluginContainers) {
+    const pcArr = (styleDef as any).pluginContainers;
+    for (const pcObj of pcArr) {
+      let containerProps = '';
+      for (const p in pcObj.props) {
+        containerProps += `${p}:${replaceLocalVarUsage(pcObj.props[p], rootDisplayName)};`;
+      }
+      cssText += `.${pcObj.containerName}:has(${dotIfNeeded(finalSelector)}){${containerProps}}`;
     }
   }
 

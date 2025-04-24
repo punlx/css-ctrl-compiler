@@ -9,7 +9,7 @@ export function transformLocalVariables(
 ): void {
   // (1) ถ้า scope=none => ถ้ามี styleDef.localVars => throw error
   if (scopeName === 'none' && styleDef.localVars && Object.keys(styleDef.localVars).length > 0) {
-    throw new Error(`[CSS-CTRL-ERR] local var (--&xxx) is not allowed in scope=none.`);
+    throw new Error('[CSS-CTRL-ERR] local var (--&xxx) is not allowed in scope=none.');
   }
 
   // (2) ถ้ามี localVars => ประกาศเป็น --xxx-displayName ใน :root
@@ -74,6 +74,16 @@ export function transformLocalVariables(
       if (!stObj || !stObj.props) continue;
       for (const propKey in stObj.props) {
         stObj.props[propKey] = stObj.props[propKey].replace(placeholderRegex, replacer);
+      }
+    }
+  }
+
+  // (MODIFIED) (9) replace ใน pluginContainers
+  if ((styleDef as any).pluginContainers) {
+    const pcArr = (styleDef as any).pluginContainers;
+    for (const pcObj of pcArr) {
+      for (const prop in pcObj.props) {
+        pcObj.props[prop] = pcObj.props[prop].replace(placeholderRegex, replacer);
       }
     }
   }

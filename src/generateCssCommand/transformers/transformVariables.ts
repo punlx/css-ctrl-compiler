@@ -9,7 +9,7 @@ export function transformVariables(
 ): void {
   // (NEW) ถ้า scope=none => ถ้า styleDef.hasRuntimeVar => throw error
   if (scopeName === 'none' && styleDef.hasRuntimeVar) {
-    throw new Error(`[CSS-CTRL-ERR] $variable is not allowed in scope=none.`);
+    throw new Error('[CSS-CTRL-ERR] $variable is not allowed in scope=none.');
   }
 
   // Base variables (varBase)
@@ -67,8 +67,7 @@ export function transformVariables(
     }
   }
 
-  // (NEW) handle pluginStates => คล้ายกับ state variables, เพราะ parsePluginStateStyle เก็บ $var ใน varStates
-  // แต่ส่วน property จะอยู่ใน (styleDef as any).pluginStates[stateName].props => เราต้อง replace var(--xxx-stateName)
+  // (NEW) handle pluginStates => คล้ายกับ state variables
   if ((styleDef as any).pluginStates && styleDef.varStates) {
     for (const stName in (styleDef as any).pluginStates) {
       // เช็คว่ามี varStates[stName] ไหม
@@ -90,6 +89,32 @@ export function transformVariables(
         for (const propKey in propsObj) {
           const oldVal = propsObj[propKey];
           propsObj[propKey] = oldVal.replace(pat, `var(${finalVarName})`);
+        }
+      }
+    }
+  }
+
+  // (MODIFIED) handle pluginContainers => คล้ายกับ pluginStates
+  if (styleDef.varContainers && styleDef.pluginContainers) {
+    // styleDef.varContainers: { [containerClass]: { varName: rawValue } }
+    // styleDef.pluginContainers: { containerName: string, props: {} }[]
+    for (const containerClass in styleDef.varContainers) {
+      // @ts-ignore
+      const containerVars = styleDef.varContainers[containerClass];
+      // @ts-ignore
+      for (const varName in containerVars) {
+        const rawValue = containerVars[varName];
+        const finalVarName = `--${varName}-${displayName}-${containerClass}`;
+        styleDef.rootVars = styleDef.rootVars || {};
+        styleDef.rootVars[finalVarName] = rawValue;
+
+        // หา pluginContainerObj
+        const pcObj = styleDef.pluginContainers.find((x) => x.containerName === containerClass);
+        if (pcObj) {
+          const pat = `var(--${varName}-${containerClass})`;
+          for (const propKey in pcObj.props) {
+            pcObj.props[propKey] = pcObj.props[propKey].replace(pat, `var(${finalVarName})`);
+          }
         }
       }
     }
