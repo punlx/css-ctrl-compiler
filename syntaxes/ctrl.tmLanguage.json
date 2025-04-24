@@ -65,7 +65,7 @@
         },
         {
           "name": "entity.other.attribute-name.class.css",
-          "match": "(before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|hover|focus|active|focus-within|focus-visible|target|disabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid|option-active|option-selected|option-unselected|option-disabled|accordion-active|accordion-expanded|accordion-collapsed|accordion-disabled|accordion-collapsed|accordion-disabled)"
+          "match": "(before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|hover|focus-within|focus-visible|focus|active|target|disabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid|option-active|option-selected|option-unselected|option-disabled|accordion-active|accordion-expanded|accordion-collapsed|accordion-disabled|accordion-collapsed|accordion-disabled)"
         },
         {
           "name": "keyword.control.at-rule.css",
