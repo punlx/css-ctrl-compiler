@@ -47,11 +47,13 @@
   },
   "scripts": {
     "compile": "tsc -p .",
-    "build": "rm -rf out && tsc"
+    "build": "rm -rf out && node esbuild.config.js"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",
     "@types/vscode": "^1.80.0",
+    "esbuild": "^0.25.3",
+    "prettier": "^3.5.3",
     "typescript": "^5.0.2",
     "vsce": "^2.x"
   },
