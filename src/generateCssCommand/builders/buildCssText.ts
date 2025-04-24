@@ -381,21 +381,6 @@ function maybeResolveScopeRef(
   });
 }
 
-/**
- * joinSelector:
- *  - ถ้า pluginSelector เริ่มด้วย '.' หรือ '[' => ต่อท้าย baseSelector ทันที (ไม่เติม '.')
- *  - ถ้าไม่ใช่ => ใส่ '.' ตรงกลาง (กรณีเป็น custom class name)
- *
- * ตัวอย่าง:
- *   joinSelector('.scopename_classname', '.listboxPlugin-active')
- *       => '.scopename_classname.listboxPlugin-active'
- *
- *   joinSelector('.scopename_classname', '[role="alert"]')
- *       => '.scopename_classname[role="alert"]'
- *
- *   joinSelector('.scopename_classname', 'some-class')
- *       => '.scopename_classname.some-class'
- */
 function joinSelector(baseSelector: string, pluginSelector: string): string {
   const trimPlugin = pluginSelector.trim();
   if (!trimPlugin) return baseSelector;
