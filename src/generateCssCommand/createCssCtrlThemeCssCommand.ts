@@ -198,7 +198,7 @@ function parseCssCtrlThemeSource(sourceText: string): IParseResult {
       const className = im[2];
       const dsl = im[3] || im[4] || '';
       // เช็ค disallowed ($, --&, @use, @query) ที่นี่ก็ได้
-      if (/\$/.test(dsl) || /--&/.test(dsl) || /@use/.test(dsl) || /@query/.test(dsl)) {
+      if (/\$/.test(dsl) || /--&/.test(dsl) || /@use/.test(dsl) || /(@query|>)/.test(dsl)) {
         throw new Error(
           `[CSS-CTRL-ERR] theme.class(...) not allowed to use $var, --&var, @use, or @query. Found in class "${className}".`
         );

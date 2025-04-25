@@ -4,19 +4,19 @@ import * as vscode from 'vscode';
 
 export function createQueryScopeSuggestionProvider() {
   return vscode.languages.registerCompletionItemProvider(
-    { scheme: 'file', language: 'typescript' }, // หรือปรับตามต้องการ
+    { scheme: 'file', language: 'typescript' }, 
     {
       provideCompletionItems(document, position, token, context) {
         // ตรวจ regex pattern "@query ... @scope."
         const lineText = document.lineAt(position.line).text;
         const textBefore = lineText.slice(0, position.character);
 
-        const scopePattern = /@query.*@scope\.$/;
+        // แก้ให้ตรวจจับ @query หรือ >
+        const scopePattern = /(@query|>).*@scope\.$/;
         if (!scopePattern.test(textBefore)) {
           return undefined;
         }
 
-        // เรียก extractTopLevelClasses แบบใหม่
         const fullText = document.getText();
         const topLevelClasses = extractTopLevelClasses(fullText);
 
@@ -36,40 +36,27 @@ export function createQueryScopeSuggestionProvider() {
   );
 }
 
-/**
- * extractTopLevelClasses - หา ".className" ที่ระดับบนสุด (braceCount == 0)
- * และ **บรรทัดนั้นต้องไม่ประกอบด้วย `@query`**.
- */
 function extractTopLevelClasses(text: string): string[] {
   const lines = text.split('\n');
   let braceCount = 0;
   const result: string[] = [];
 
-  // regex จับ className ต้นบรรทัด
   const classPattern = /^\s*\.([\w-]+)\s*\{/;
 
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
-    // เช็ค braceCount ของบรรทัดก่อน
-    // (ก่อน parse บรรทัดนี้)
+    const line = lines[i];
 
-    // ถอด { } ในบรรทัด ออกจาก context of searching class pattern
-    // แต่ note: ต้อง update braceCount หลัง parse pattern line ด้วย (เพราะ {} อาจอยู่หลัง class)
-
-    // Step1) ลองจับ class pattern
     if (braceCount === 0) {
-      // เช็คว่า line มี "@query" ไหม
-      if (!line.includes('@query')) {
-        // regex match .className {
+      // แก้ให้เช็คว่าบรรทัดไม่มี @query และไม่มี >
+      if (!line.includes('@query') && !line.includes('>')) {
         const m = line.match(classPattern);
         if (m) {
-          result.push(m[1]); // เก็บชื่อคลาส
+          result.push(m[1]);
         }
       }
     }
 
-    // Step2) นับ { } ในบรรทัดนี้
-    // แบบง่ายๆ
+    // นับ { } เพื่อดูว่าอยู่ระดับ top-level หรือไม่
     for (const c of line) {
       if (c === '{') braceCount++;
       if (c === '}') braceCount--;

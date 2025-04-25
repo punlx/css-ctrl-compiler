@@ -46,9 +46,9 @@ export function updateQueryDecorations(editor: vscode.TextEditor) {
         after: {
           contentText: 'query',
           fontStyle: 'italic',
-          color: 'rgb(96, 96, 96)'
-        }
-      }
+          color: 'rgb(133, 133, 133)',
+        },
+      },
     };
     decorations.push(decoration);
   }
@@ -159,7 +159,11 @@ function findClosingBacktick(text: string, start: number): number {
  * - ถ้าเจอ '>' ใน depth>0 => เก็บ offset
  * - ถ้าบรรทัดเดียวมี '> >' ติดกัน (ไม่มี whitespace คั่น) => เก็บเฉพาะตัวแรก
  */
-function gatherQueryGtPositionsInSubstr(fullText: string, startOffset: number, endOffset: number): number[] {
+function gatherQueryGtPositionsInSubstr(
+  fullText: string,
+  startOffset: number,
+  endOffset: number
+): number[] {
   const positions: number[] = [];
   let curlyDepth = 0;
   let offsetCursor = startOffset;

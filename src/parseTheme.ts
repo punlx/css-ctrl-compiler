@@ -306,7 +306,7 @@ export function parseThemeClassFull(themeFilePath: string): Record<string, strin
       /\$/.test(dslContent) ||
       /--&/.test(dslContent) ||
       /@use/.test(dslContent) ||
-      /@query/.test(dslContent)
+      /(@query|>)/.test(dslContent)
     ) {
       throw new Error(
         `[CSS-CTRL-ERR] theme.class(...) not allowed to use $var, --&var, @use, or @query. Found in class "${className}".`

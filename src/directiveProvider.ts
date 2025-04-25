@@ -16,18 +16,23 @@ export function createDirectiveProvider() {
         const lineText = document.lineAt(position).text;
         const textBeforeCursor = lineText.substring(0, position.character);
 
-        // ต้องลงท้ายด้วย '@'
-        if (!textBeforeCursor.endsWith('@')) {
+        // (1) เช็คให้ trigger ได้ทั้ง '@' และ '>'
+        // เดิม: if (!textBeforeCursor.endsWith('@')) { ... }
+        // ใหม่: ถ้าไม่ได้ลงท้ายด้วย '@' และไม่ได้ลงท้ายด้วย '>'
+        if (
+          !textBeforeCursor.endsWith('@') &&
+          !textBeforeCursor.endsWith('>')
+        ) {
           return;
         }
 
-        // (A) เคสพิเศษ: ถ้าอยู่หลัง "@query" แต่ยังไม่เปิด '{'
-        if (isAfterQueryButNoBrace(document, position)) {
-          // => Suggest เฉพาะ "scope"
-          return [makeItem('scope', 'CSS-CTRL directive @scope (after @query)')];
+        // (2) เคสพิเศษ: ถ้าอยู่หลัง "@query" หรือ ">" (ที่ทำหน้าที่เหมือน query) แต่ยังไม่เปิด '{'
+        //     => ให้ suggest "scope"
+        if (isAfterQuerySymbolButNoBrace(document, position)) {
+          return [makeItem('scope', 'CSS-CTRL directive @scope (after @query or >)')];
         }
 
-        // (B) ถ้าไม่เข้าเคสพิเศษ => ใช้ blockStack logic
+        // (3) ถ้าไม่เข้าเคสพิเศษ => ใช้ blockStack logic
         const stack = findBlockStack(document, position);
 
         // อยู่ในบล็อก @const => ไม่แนะนำ directive อื่น
@@ -35,34 +40,34 @@ export function createDirectiveProvider() {
           return undefined;
         }
 
-        // อยู่ในบล็อก .class => แนะนำ use, query (หรือจะเพิ่ม keyframe ก็ได้)
+        // อยู่ในบล็อก .class => แนะนำ use, query
         if (stack.includes('class')) {
           return [
             makeItem('use', 'CSS-CTRL directive @use (in class)'),
             makeItem('query', 'CSS-CTRL directive @query (in class)'),
-            // ถ้าต้องการให้ @keyframe ใช้ใน class block ด้วย ก็ uncomment ด้านล่างได้
-            // makeItem('keyframe', 'CSS-CTRL directive @keyframe (in class)'),
           ];
         }
 
-        // อยู่ในบล็อก @query => แนะนำ scope
+        // อยู่ในบล็อก @query (หรือ '>' ที่นับเป็น query) => แนะนำ scope
         if (stack.includes('query')) {
           return [makeItem('scope', 'CSS-CTRL directive @scope (in query)')];
         }
 
-        // (C) Top-level => แนะนำ scope, bind, const, และ keyframe  (**NEW**)
+        // Top-level => แนะนำ scope, bind, const, keyframe
         return [
           makeItem('scope', 'CSS-CTRL Scope directive'),
           makeItem('bind', 'CSS-CTRL Bind directive'),
           makeItem('const', 'CSS-CTRL Abbe Constant directive'),
-          makeItem('keyframe', 'CSS-CTRL Keyframe directive'), // **NEW**
+          makeItem('keyframe', 'CSS-CTRL Keyframe directive'),
         ];
       },
     },
-    '@'
+    '@',
+    '>' // (เพิ่ม trigger char '>' ด้วย)
   );
 }
 
+// สร้าง CompletionItem ช่วย
 function makeItem(name: string, detail: string): vscode.CompletionItem {
   const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Event);
   item.insertText = name;
@@ -71,33 +76,35 @@ function makeItem(name: string, detail: string): vscode.CompletionItem {
 }
 
 /**
- * isAfterQueryButNoBrace:
- * เช็คว่าในบรรทัด (จนถึง cursor) มี "@query"
- * แต่ยังไม่เจอ '{' และเจอ "@" ตรงปลาย => "กำลังจะพิมพ์ directive"
+ * isAfterQuerySymbolButNoBrace:
+ * เช็คว่าในโค้ด (จนถึง cursor) มี "@query" หรือ ">"
+ * แต่ยังไม่เจอ '{' และ cursor เพิ่งพิมพ์ '@' หรือ '>' => "กำลังจะพิมพ์ directive"
  */
-function isAfterQueryButNoBrace(document: vscode.TextDocument, position: vscode.Position): boolean {
+function isAfterQuerySymbolButNoBrace(document: vscode.TextDocument, position: vscode.Position): boolean {
   const lineText = document.lineAt(position.line).text;
   const textBefore = lineText.slice(0, position.character);
 
-  // cursor ลงท้ายด้วย '@' ?
-  if (!textBefore.endsWith('@')) {
+  // cursor ลงท้ายด้วย '@' หรือ '>' ?
+  if (!textBefore.endsWith('@') && !textBefore.endsWith('>')) {
     return false;
   }
 
   // เอาเนื้อหาทั้งหมดจนถึง cursor
-  const fullTextUpToCursor = document.getText(
-    new vscode.Range(new vscode.Position(0, 0), position)
-  );
+  const fullTextUpToCursor = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
 
-  // (1) หา lastIndexOf('@query')
+  // (1) หา lastIndexOf('@query') หรือ '>'
   const idxQuery = fullTextUpToCursor.lastIndexOf('@query');
-  if (idxQuery === -1) {
-    return false; // ไม่มี @query
+  const idxArrow = fullTextUpToCursor.lastIndexOf('>');
+
+  // สมมติถือว่า '>' แทน @query => เราจะใช้ค่าที่มากกว่ากันเป็น "จุดล่าสุด"
+  const idxSymbol = Math.max(idxQuery, idxArrow);
+  if (idxSymbol === -1) {
+    return false; // ไม่มีทั้ง '@query' และ '>'
   }
 
-  // (2) จาก idxQuery จนถึง cursor => มี '{' ไหม
-  const substringFromQuery = fullTextUpToCursor.slice(idxQuery, fullTextUpToCursor.length);
-  if (substringFromQuery.includes('{')) {
+  // (2) จาก idxSymbol จนถึง cursor => มี '{' ไหม
+  const substringFromSymbol = fullTextUpToCursor.slice(idxSymbol, fullTextUpToCursor.length);
+  if (substringFromSymbol.includes('{')) {
     // block เปิดไปแล้ว => ไม่เข้าเคสพิเศษ
     return false;
   }
@@ -112,25 +119,22 @@ function isAfterQueryButNoBrace(document: vscode.TextDocument, position: vscode.
 function findBlockStack(document: vscode.TextDocument, position: vscode.Position): string[] {
   const textUpToCursor = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
 
-  // **NEW**: เพิ่ม 'keyframe' ใน union type
+  // เพิ่ม 'keyframe' ใน type
   const tokens: { index: number; type: 'class' | 'const' | 'query' | 'close' | 'keyframe' }[] = [];
 
   // class => .xxxx {
   scanRegex(/\.\w+\s*\{/g, 'class');
   // const => @const ... {
   scanRegex(/@const\b[^\{]*\{/g, 'const');
-  // query => @query ... {
-  scanRegex(/@query\b[^\{]*\{/g, 'query');
-  // **NEW** keyframe => @keyframe ... {
-  scanRegex(/@keyframe\b[^\{]*\{/g, 'keyframe'); // **NEW**
-
+  // query => จับทั้ง @query ... { หรือ > ... {
+  scanRegex(/@query\b[^\{]*\{|>\s*[^\{]*\{/g, 'query');
+  // keyframe => @keyframe ... {
+  scanRegex(/@keyframe\b[^\{]*\{/g, 'keyframe');
   // close => }
   scanRegex(/\}/g, 'close');
 
-  // เรียง token ตามลำดับที่เจอ
   tokens.sort((a, b) => a.index - b.index);
 
-  // จำลอง stack (push เมื่อเจอเปิดบล็อก, pop เมื่อเจอ '}')
   const stack: string[] = [];
   for (const tk of tokens) {
     if (tk.type === 'close') {

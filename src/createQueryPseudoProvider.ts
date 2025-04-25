@@ -25,7 +25,7 @@ export function createQueryPseudoProvider() {
 
         // 4) ใช้ regex (@query ...:)
         //   ตัวอย่างง่าย: ถ้าพบ "@query" + อะไรก็ได้ จบด้วย ":"
-        const pattern = /@query\s+.*:$/;
+        const pattern = /(@query|>)\s+.*:$/;
         if (!pattern.test(textBeforeCursor)) {
           return;
         }
