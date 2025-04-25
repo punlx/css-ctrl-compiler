@@ -9,6 +9,7 @@ import { abbrMap } from './constants/abbrMap'; // <-- import มาให้แ�
 import { parseSingleAbbr } from './parsers/parseSingleAbbr';
 import { createEmptyStyleDef } from './helpers/createEmptyStyleDef';
 import { buildCssText } from './builders/buildCssText';
+import { formatCss } from '../formatters/formatCss';
 
 // ---------------------- simulate from theme.ts ----------------------
 function generatePaletteCSS(colors: string[][]): string {
@@ -294,5 +295,7 @@ export async function createCssCtrlThemeCssFile(doc: vscode.TextDocument) {
     throw err;
   }
 
-  fs.writeFileSync(newCssFilePath, generatedCss, 'utf8');
+  const formattedCss = await formatCss(generatedCss);
+
+  fs.writeFileSync(newCssFilePath, formattedCss, 'utf8');
 }
