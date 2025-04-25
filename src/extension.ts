@@ -1,23 +1,10 @@
 // src/extension.ts
-
 import * as vscode from 'vscode';
 import { createScopeSuggestionProvider } from './scopeSuggestionProvider';
-
-// --- (NEW) import createCssCtrlThemeCssFile ---
 import { createCssCtrlThemeCssFile } from './generateCssCommand/createCssCtrlThemeCssCommand';
-
-// import validateCssCtrlDoc.ts ซึ่งไว้ parse-check ใส่ Diagnostic
 import { validateCssCtrlDoc } from './generateCssCommand/validateCssCtrlDoc';
-
-// import createCssCtrlCssFile (จากโค้ดข้างบน)
 import { createCssCtrlCssFile } from './generateCssCommand/createCssCtrlCssCommand';
-
-// generateGenericProvider (command "ctrl.generateGeneric")
 import { generateGenericProvider } from './generateGenericProvider';
-
-/* -------------------------------------------------------------------------
-   provider / parseTheme / etc. ...
-------------------------------------------------------------------------- */
 import {
   parseThemePaletteFull,
   parseThemeBreakpointDict,
@@ -25,10 +12,8 @@ import {
   parseThemeKeyframeDict,
   parseThemeVariableDict,
   parseThemeDefine,
-  // เพิ่มเติม: parseThemeDefineFull (ใช้ดึงสไตล์เต็มๆ)
   parseThemeDefineFull,
 } from './parseTheme';
-
 import { createQueryScopeSuggestionProvider } from './queryScopeSuggestionProvider';
 import { createCSSValueSuggestProvider } from './cssValueSuggestProvider';
 import { createReversePropertyProvider } from './reversePropertyProvider';
@@ -57,17 +42,19 @@ import { globalDefineMap } from './generateCssCommand/createCssCtrlCssCommand';
 import { createEmptyStyleDef } from './generateCssCommand/helpers/createEmptyStyleDef';
 import { parseSingleAbbr } from './generateCssCommand/parsers/parseSingleAbbr';
 import { createBorderStyleProvider } from './createBorderStyleProvider';
+
+/* ------------------ (NEW) import ghostQueryDecorations ------------------ */
+import { updateQueryDecorations, registerAutoInsertSpaceWhenGt } from './ghostQueryDecorations';
+
 export let globalBreakpointDict: Record<string, string> = {};
 export let globalTypographyDict: Record<string, string> = {};
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log('Css-CTRL Intellisense is now active!');
 
-  // สร้าง DiagnosticCollection สำหรับ validate
   const cssCtrlDiagnosticCollection = vscode.languages.createDiagnosticCollection('ctrl');
   context.subscriptions.push(cssCtrlDiagnosticCollection);
 
-  // parse theme ...
   await initPaletteMap();
   let paletteColors: Record<string, Record<string, string>> = {};
   let screenDict: Record<string, string> = {};
@@ -75,8 +62,6 @@ export async function activate(context: vscode.ExtensionContext) {
   let keyframeDict: Record<string, string> = {};
   let spacingDict: Record<string, string> = {};
   let defineMap: Record<string, string[]> = {};
-
-  // (NEW) สำหรับ define แบบ “เต็ม” (raw style string)
   let defineRawMap: Record<string, Record<string, string>> = {};
 
   if (vscode.workspace.workspaceFolders?.length) {
@@ -94,8 +79,6 @@ export async function activate(context: vscode.ExtensionContext) {
         keyframeDict = parseThemeKeyframeDict(themeFilePath);
         spacingDict = parseThemeVariableDict(themeFilePath);
         defineMap = parseThemeDefine(themeFilePath);
-
-        // (NEW) parse define แบบเต็ม (ดึงสตริงสไตล์)
         defineRawMap = parseThemeDefineFull(themeFilePath);
       }
     } catch (err) {
@@ -152,17 +135,26 @@ export async function activate(context: vscode.ExtensionContext) {
 
   initSpacingMap(spacingDict);
 
-  // ตกแต่ง GhostText / Decorator
+  // --------------------------------------------------------------------------
+  // (NEW) เรียก registerAutoInsertSpaceWhenGt เพื่อดักพิมพ์ '>'
+  // --------------------------------------------------------------------------
+
+  // อัปเดต ghost text ต่าง ๆ
   if (vscode.window.activeTextEditor) {
     updateDecorations(vscode.window.activeTextEditor);
     updateSpacingDecorations(vscode.window.activeTextEditor);
     updateImportantDecorations(vscode.window.activeTextEditor);
+    // (NEW) updateQueryDecorations
+    updateQueryDecorations(vscode.window.activeTextEditor);
+    registerAutoInsertSpaceWhenGt(context);
   }
+
   const changeEditorDisposable = vscode.window.onDidChangeActiveTextEditor((editor) => {
     if (editor) {
       updateDecorations(editor);
       updateSpacingDecorations(editor);
       updateImportantDecorations(editor);
+      updateQueryDecorations(editor);
     }
   });
   context.subscriptions.push(changeEditorDisposable);
@@ -173,26 +165,22 @@ export async function activate(context: vscode.ExtensionContext) {
       updateDecorations(editor);
       updateSpacingDecorations(editor);
       updateImportantDecorations(editor);
+      updateQueryDecorations(editor);
     }
   });
   context.subscriptions.push(changeDocDisposable);
 
-  // push generateGenericProvider
   context.subscriptions.push(generateGenericProvider);
 
-  // --------------------------------------------------------------------------------
-  // (NEW) เชื่อมข้อมูล screenDict, fontDict, defineRawMap => globalDefineMap
-  // --------------------------------------------------------------------------------
-  globalBreakpointDict = screenDict; // สำหรับ screen(...) / container(...)
-  globalTypographyDict = typographyDict; // สำหรับ ty[...]
-  // แปลง defineRawMap => globalDefineMap
+  globalBreakpointDict = screenDict;
+  globalTypographyDict = typographyDict;
+
   for (const mainKey in defineRawMap) {
     globalDefineMap[mainKey] = {};
     const subObj = defineRawMap[mainKey];
     for (const subKey in subObj) {
       const rawStyleStr = subObj[subKey];
       const partialDef = createEmptyStyleDef();
-      // แตกเป็นบรรทัด => parse ทีละบรรทัด (isConstContext=true, isDefineContext=true)
       const lines = rawStyleStr
         .split(/\n/)
         .map((x) => x.trim())
@@ -216,33 +204,26 @@ export async function activate(context: vscode.ExtensionContext) {
   // --------------------------------------------------------------------------------
   // เมื่อ save ไฟล์ .ctrl.ts => validate ใหม่ ถ้าไม่ error => generate
   // --------------------------------------------------------------------------------
-  // แทนที่ saveDisposable เดิมด้วย onWillSaveTextDocument
   const willSaveDisposable = vscode.workspace.onWillSaveTextDocument((e) => {
     const savedDoc = e.document;
     const activeEditor = vscode.window.activeTextEditor;
-
     if (!activeEditor || activeEditor.document.uri.toString() !== savedDoc.uri.toString()) {
       return;
     }
-
     if (savedDoc.fileName.endsWith('.ctrl.ts')) {
       e.waitUntil(
         (async () => {
-          // validate
           validateCssCtrlDoc(savedDoc, cssCtrlDiagnosticCollection);
-
           const diags = cssCtrlDiagnosticCollection.get(savedDoc.uri);
           const hasErr = diags && diags.some((d) => d.severity === vscode.DiagnosticSeverity.Error);
           if (hasErr) {
             return;
           }
-
           try {
             await createCssCtrlCssFile(savedDoc);
           } catch (err) {
             return;
           }
-
           await vscode.commands.executeCommand('ctrl.generateGeneric');
         })()
       );
@@ -250,9 +231,6 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(willSaveDisposable);
 
-  // --------------------------------------------------------------------------------
-  // Command สร้างไฟล์ .ctrl.css และ generate
-  // --------------------------------------------------------------------------------
   const combinedCommand = vscode.commands.registerCommand(
     'ctrl.createCssCtrlCssAndGenerate',
     async () => {
@@ -261,20 +239,17 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage('No active text editor');
         return;
       }
-
       validateCssCtrlDoc(editor.document, cssCtrlDiagnosticCollection);
       const diags = cssCtrlDiagnosticCollection.get(editor.document.uri);
       const hasErr = diags && diags.some((d) => d.severity === vscode.DiagnosticSeverity.Error);
       if (hasErr) {
         return;
       }
-
       try {
         await createCssCtrlCssFile(editor.document);
       } catch (err) {
         return;
       }
-
       await vscode.commands.executeCommand('ctrl.generateGeneric');
     }
   );

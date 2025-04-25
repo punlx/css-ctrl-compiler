@@ -4,6 +4,67 @@ import * as vscode from 'vscode';
 
 export const indentUnit = '  ';
 
+// ----------------------------------------------------------
+// 1) ฟังก์ชัน transformAngleBracketsLineBased:
+//    สแกนบรรทัด เพื่อเปลี่ยน '>' ที่อยู่ต้นบรรทัด (หลัง trim) => "@query/*__angleN__*/"
+//    โดยเก็บ N = จำนวน '>' ต่อเนื่อง
+// ----------------------------------------------------------
+function transformAngleBracketsLineBased(text: string): string {
+  const lines = text.split('\n');
+  const newLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // ถ้าบรรทัดนี้ (หลัง trim) ขึ้นต้นด้วย '>'
+    // ให้นับว่ามีกี่ตัวต่อเนื่อง (เช่น ">>" => 2 ตัว)
+    if (trimmed.startsWith('>')) {
+      const lineIndentMatch = /^(\s*)/.exec(line);
+      const lineIndent = lineIndentMatch ? lineIndentMatch[1] : '';
+
+      let countGT = 1;
+      let j = 1;
+      while (j < trimmed.length && trimmed[j] === '>') {
+        j++;
+        countGT++;
+      }
+      const leftover = trimmed.slice(countGT); // ส่วนต่อจาก '>' ทั้งหมด
+
+      // สร้างสายอักขระแทนที่:
+      //  - "@query/*__angleN__*/"
+      //  - ถ้ามี leftover => ใส่ต่อท้าย (พร้อมเว้นวรรคหนึ่งช่อง)
+      // ตัวอย่าง: "> > div {" => "@query/*__angle2__*/ div {"
+      let replacedLine = lineIndent + `@query/*__angle${countGT}__*/`;
+      if (leftover) {
+        replacedLine += ' ' + leftover.trimStart();
+      }
+
+      newLines.push(replacedLine);
+    } else {
+      // บรรทัดอื่น ไม่ยุ่ง
+      newLines.push(line);
+    }
+  }
+
+  return newLines.join('\n');
+}
+
+// ----------------------------------------------------------
+// 2) ฟังก์ชัน revertAngleMarkerToGt:
+//    หลังจากระบบ format + indent เสร็จ เราจะได้โค้ดที่มี
+//    "@query/*__angleN__*/" อยู่ ให้แปลงกลับเป็น '>' N ตัว
+// ----------------------------------------------------------
+function revertAngleMarkerToGt(text: string): string {
+  // เราจะหา pattern @query/*__angle(\d+)__*/
+  // แล้วแทนที่ด้วย '>' * n
+  const re = /@query\/\*__angle(\d+)__\*\//g;
+
+  return text.replace(re, (_, digits) => {
+    const n = parseInt(digits, 10);
+    return '>'.repeat(n);
+  });
+}
+
 // generateGeneric.ts
 function generateGeneric(sourceCode: string): string {
   // ---------------------------------------------------------------------------
@@ -15,7 +76,12 @@ function generateGeneric(sourceCode: string): string {
 
   const fullMatch = match[0]; // ตัวเต็ม "css ... ` ... `"
   const prefix = match[1]; // "css" หรือ "css<...>"
-  const templateContent = match[2]; // โค้ดภายใน backtick
+  let templateContent = match[2]; // โค้ดภายใน backtick
+
+  // ---------------------------------------------------------------------------
+  // (Pass 1) Pre-process: เปลี่ยน '>' ต้นบรรทัดเป็น @query/*__angleN__*/
+  // ---------------------------------------------------------------------------
+  templateContent = transformAngleBracketsLineBased(templateContent);
 
   // ---------------------------------------------------------------------------
   // 2) เตรียมโครงสร้าง classMap / constMap / keyframeMap
@@ -43,7 +109,6 @@ function generateGeneric(sourceCode: string): string {
           // กรองกรณีพิเศษ: ถ้าเจอ "--$" ต่อกัน
           const idx = m.index || 0;
           const matchText = m[1];
-          // ถ้าเป็น `$xxx` แต่ข้างหน้ามี `--` => skip
           if (matchText.startsWith('$') && idx >= 2 && inside.slice(idx - 2, idx) === '--') {
             return false;
           }
@@ -54,10 +119,10 @@ function generateGeneric(sourceCode: string): string {
       // **เปลี่ยน** ให้ `$bg => "bg"`, `--&local => "local"` ก่อนค่อย + pseudoFn
       for (const styleName of styleMatches) {
         if (styleName.startsWith('$')) {
-          const raw = styleName.slice(1); // "$bg" => "bg"
+          const raw = styleName.slice(1);
           targetSet.add(`${raw}-${pseudoFn}`);
         } else if (styleName.startsWith('--&')) {
-          const localName = styleName.slice('--&'.length); // "--&abc" => "abc"
+          const localName = styleName.slice('--&'.length);
           targetSet.add(`${localName}-${pseudoFn}`);
         }
       }
@@ -70,14 +135,10 @@ function generateGeneric(sourceCode: string): string {
 
     const directMatches = [...contentWithoutFn.matchAll(/(\$[\w-]+|--&[\w-]+)\[/g)]
       .filter((m) => {
-        // กันกรณี match $xxx ติดหน้า '--'
         const idx = m.index || 0;
         const matchText = m[1];
-        if (
-          matchText.startsWith('$') &&
-          idx >= 2 &&
-          contentWithoutFn.slice(idx - 2, idx) === '--'
-        ) {
+        // กันกรณี match $xxx ติดหน้า '--'
+        if (matchText.startsWith('$') && idx >= 2 && contentWithoutFn.slice(idx - 2, idx) === '--') {
           return false;
         }
         return true;
@@ -86,10 +147,8 @@ function generateGeneric(sourceCode: string): string {
 
     for (const styleName of directMatches) {
       if (styleName.startsWith('$')) {
-        // e.g. "$bg" => "bg"
         targetSet.add(styleName.slice(1));
       } else if (styleName.startsWith('--&')) {
-        // e.g. "--&localVar" => "localVar"
         const localName = styleName.slice('--&'.length);
         targetSet.add(localName);
       }
@@ -101,21 +160,18 @@ function generateGeneric(sourceCode: string): string {
   // ---------------------------------------------------------------------------
   function parseKeyframeBody(kfName: string, body: string): Set<string> {
     const result = new Set<string>();
-    // step เช่น 10%(...), 50%(...), 100%(...) หรือ from(...), to(...)
     const stepRegex = /(\d+)%\s*\(([^)]*)\)|(from|to)\s*\(([^)]*)\)/g;
     let mm: RegExpExecArray | null;
     while ((mm = stepRegex.exec(body)) !== null) {
-      const numericStep = mm[1]; // "10" หรือ undefined
-      const fromToStep = mm[3]; // "from" หรือ "to" หรือ undefined
+      const numericStep = mm[1];
+      const fromToStep = mm[3];
       const inside = mm[2] || mm[4] || '';
       const stepLabel = numericStep || fromToStep || '';
 
-      // หา $var
       const varRegex = /\$([\w-]+)/g;
       let varMatch: RegExpExecArray | null;
       while ((varMatch = varRegex.exec(inside)) !== null) {
-        const varName = varMatch[1]; // "bg" จาก $bg
-        // สร้างคีย์ เช่น "kf2_10_bg" หรือ "kf2_from_bg"
+        const varName = varMatch[1];
         result.add(`${kfName}_${stepLabel}_${varName}`);
       }
     }
@@ -161,7 +217,6 @@ function generateGeneric(sourceCode: string): string {
       const clsName = classMatch[1];
       const innerContent = classMatch[2];
 
-      // --- (A) ดึง substring ของ “ทั้งบรรทัด”
       const matchIndex = classMatch.index;
 
       let lineStart = templateContent.lastIndexOf('\n', matchIndex);
@@ -211,10 +266,9 @@ function generateGeneric(sourceCode: string): string {
         const animRegex = /\bam(?:-name)?\[\s*([\w-]+)/g;
         let animMatch: RegExpExecArray | null;
         while ((animMatch = animRegex.exec(innerContent)) !== null) {
-          const usedKF = animMatch[1]; // ชื่อ keyframe เช่น kf2
+          const usedKF = animMatch[1];
           if (keyframeMap[usedKF]) {
             for (const kfVal of keyframeMap[usedKF]) {
-              // kfVal เป็นรูป 'kf2_10_bg' หรือ 'kf2_from_bg' เป็นต้น
               classMap[clsName].add(kfVal);
             }
           }
@@ -378,10 +432,16 @@ function generateGeneric(sourceCode: string): string {
 
   finalLines.push(...formattedBlockLines);
 
+  // (Pass ที่ 2.1) ได้ finalBlock หลัง format
   const finalBlock = finalLines.join('\n');
+
+  // (Pass ที่ 2.2) จัด indent @query
   const finalBlock2 = unifiedQueryIndent(finalBlock);
 
-  const newStyledBlock = `${newPrefix}\`\n${finalBlock2}\n\``;
+  // (Pass ที่ 2.3) แปลง @query/*__angleN__*/ กลับเป็น '>' N ตัว
+  const finalBlock3 = revertAngleMarkerToGt(finalBlock2);
+
+  const newStyledBlock = `${newPrefix}\`\n${finalBlock3}\n\``;
   return sourceCode.replace(fullMatch, newStyledBlock);
 
   // ---------------------------------------------------------------------------
