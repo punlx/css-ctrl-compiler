@@ -16,28 +16,18 @@ export function createDirectiveProvider() {
         const lineText = document.lineAt(position.line).text;
         const textBeforeCursor = lineText.substring(0, position.character);
 
-        // 1) เราให้ trigger เฉพาะ '@' ดังนั้น ถ้าไม่จบด้วย '@' ก็ไม่ทำงาน
+        // 1) ให้ trigger เฉพาะ '@'
         if (!textBeforeCursor.endsWith('@')) {
           return;
         }
 
-        // --------------------------------------------------------
-        // 2) เช็คเคสพิเศษ: ถ้าอยู่หลัง "@query" หรือ ">" แต่ยังไม่เปิด '{'
-        //    => แสดง scope
-        //
-        //    โดยเราจะถือว่า '>' ทำหน้าที่เป็น query ก็ต่อเมื่อ '>' อยู่ก่อน @ นี้
-        //    (เช่น user พิมพ์ "> @" หรือ ">    @")
-        // --------------------------------------------------------
-
-        // ตัด '@' ออก 1 ตัว เพื่อเช็คสิ่งที่อยู่ก่อนหน้า
-        const textUpToBeforeAt = textBeforeCursor.slice(0, -1);
-
-        // ถ้า isAfterQuerySymbolButNoBrace() เป็น true => Suggest "scope"
-        if (isAfterQuerySymbolButNoBrace(document, position, textUpToBeforeAt)) {
+        // 2) เคสพิเศษ: ถ้า "ก่อนหน้า @" ในบรรทัดเดียวกัน มี '@query' หรือ '>'
+        //    และยังไม่เปิด '{' => เสนอเฉพาะ "scope"
+        if (isAfterQuerySymbolButNoBrace(document, position)) {
           return [makeItem('scope', 'CSS-CTRL directive @scope (after @query or >)')];
         }
 
-        // 3) ถ้าไม่เข้าเคสพิเศษ => ใช้ blockStack logic
+        // 3) ถ้าไม่เข้าเคสพิเศษ => ใช้ blockStack logic เดิม
         const stack = findBlockStack(document, position);
 
         // อยู่ในบล็อก @const => ไม่แนะนำ directive อื่น
@@ -67,12 +57,14 @@ export function createDirectiveProvider() {
         ];
       },
     },
-    // Trigger character เฉพาะ '@' เท่านั้น!
+    // Trigger character เฉพาะ '@'
     '@'
   );
 }
 
-// สร้าง CompletionItem ช่วย
+/**
+ * สร้าง CompletionItem
+ */
 function makeItem(name: string, detail: string): vscode.CompletionItem {
   const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Event);
   item.insertText = name;
@@ -82,80 +74,61 @@ function makeItem(name: string, detail: string): vscode.CompletionItem {
 
 /**
  * isAfterQuerySymbolButNoBrace:
- *  เช็คว่าก่อนหน้า '@' มี '@query' หรือ '>' บ้างไหม
- *  ถ้ามี (และยังไม่เปิด '{') => เป็นเคสพิเศษ: แสดง "scope"
- *
- *  - textUpToBeforeAt = ข้อความถึงก่อนหน้าตัว '@' ที่เพิ่งพิมพ์
- *    (เช่นผู้ใช้พิมพ์ ">    @" -> textUpToBeforeAt จะลงท้ายด้วย ">    ")
+ *  - ตรวจสอบเฉพาะ **บรรทัดเดียวกัน** (ไม่สแกนทั้งไฟล์) ว่าก่อนหน้า '@' มี "@query" หรือ ">" ไหม
+ *  - หากมี และยังไม่เปิด '{' => เคสพิเศษ: เสนอเฉพาะ "scope"
  */
 function isAfterQuerySymbolButNoBrace(
   document: vscode.TextDocument,
-  position: vscode.Position,
-  textUpToBeforeAt: string
+  position: vscode.Position
 ): boolean {
-  // เอาเนื้อหาทั้งหมดจนถึง cursor (รวม '@')
-  const fullTextUpToCursor = document.getText(
-    new vscode.Range(new vscode.Position(0, 0), position)
-  );
+  const lineText = document.lineAt(position.line).text;
+  // substring ก่อน cursor
+  const textBeforeCursor = lineText.substring(0, position.character);
 
-  // 1) หา lastIndexOf('@query')
-  const idxQuery = fullTextUpToCursor.lastIndexOf('@query');
+  // 1) หา lastIndexOf('@query') หรือ '>' ในบรรทัดนี้
+  const idxQuery = textBeforeCursor.lastIndexOf('@query');
+  const idxArrow = textBeforeCursor.lastIndexOf('>');
 
-  // 2) เช็คว่ามี '>' ก่อนหน้า @ นี้ไหม
-  //    ใช้ lastIndexOf('>') แล้วต้องอยู่ก่อน cursor แน่นอน
-  const idxArrow = fullTextUpToCursor.lastIndexOf('>');
-
-  // 3) ถ้า idxQuery < 0 และ idxArrow < 0 => ไม่มีสัญลักษณ์
+  // ถ้าไม่มีสักอัน => ไม่เข้าเคส
   if (idxQuery < 0 && idxArrow < 0) {
     return false;
   }
 
-  // เอาตำแหน่งหลังสุดของ symbol (อาจเป็น '@query' หรือ '>')
+  // เอาตำแหน่งที่มากกว่า (latest)
   const idxSymbol = Math.max(idxQuery, idxArrow);
-  if (idxSymbol === -1) {
-    // กันกรณีทั้งหมดเป็น -1
-    return false;
-  }
 
-  // 4) จาก idxSymbol จนถึง cursor => มี '{' ไหม
-  const substringFromSymbol = fullTextUpToCursor.slice(idxSymbol);
+  // 2) ตรวจว่าหลังจาก symbol จนถึงจุด cursor มี '{' ไหม
+  const substringFromSymbol = textBeforeCursor.slice(idxSymbol);
   if (substringFromSymbol.includes('{')) {
-    // ถ้าเจอ '{' แปลว่าเปิด block ไปแล้ว => ไม่ใช่เคสพิเศษ
+    // ถ้าเปิดบล็อกแล้ว => ไม่ใช่เคสพิเศษ
     return false;
   }
 
-  // 5) สุดท้าย เช็คว่าก่อนหน้า '@' ลงท้ายด้วย '>' หรือเปล่า (เช่น ">    ")
-  //    หรือเป็น '@query' แล้วตามด้วย whitespace? (เพื่อให้ "@query" + ... + "@" ก็ได้)
-  //
-  //    เนื่องจากเราจะถือว่า: ถ้า '>' อยู่ก่อน '@' => textUpToBeforeAt ต้อง match
-  //    ส่วนกรณี '@query' ใน textUpToBeforeAt อาจจะมีคำอื่นขวางได้ แต่ idxSymbol ก็ยังอ้างอิงได้ว่าเป็นสัญลักษณ์ query
-  //
-  //    อย่างง่ายที่สุด เราอาจไม่ต้องเข้มงวดมาก:
-  //    แค่เช็คว่า idxSymbol คือจุดล่าสุดของ '@query' หรือ '>' ยังไม่เจอ '{' -> ถือว่าเคสพิเศษ
-  //    แล้วก็จบเลย
-
+  // ถ้ามาถึงนี่ => แปลว่าเจอ '@query' หรือ '>' ในบรรทัดนี้
+  // และยังไม่เจอ '{' => ถือเป็นเคสพิเศษ
   return true;
 }
 
 /**
  * findBlockStack => parse open/close block
+ *  - ลูปอ่าน textUpToCursor ทั้งหมด แล้วใช้ regex หาโทเค็นเปิด/ปิดบล็อก
+ *  - stack.push(...) เมื่อเจอเปิดบล็อก, stack.pop() เมื่อเจอปิดบล็อก
+ *  - ถ้าเจอ @query หรือ '>' + '{' => ถือเป็น 'query'
  */
 function findBlockStack(document: vscode.TextDocument, position: vscode.Position): string[] {
   const textUpToCursor = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
 
-  // เพิ่ม 'keyframe' ใน type
   const tokens: { index: number; type: 'class' | 'const' | 'query' | 'close' | 'keyframe' }[] = [];
 
-  // class => .xxxx {
+  // .class {
   scanRegex(/\.\w+\s*\{/g, 'class');
-  // const => @const ... {
+  // @const ... {
   scanRegex(/@const\b[^\{]*\{/g, 'const');
-  // query => จับทั้ง @query ... { หรือ > ... {
-  //        (เพราะถือว่า > แทน @query)
+  // @query ... { หรือ > ... {
   scanRegex(/@query\b[^\{]*\{|>\s*[^\{]*\{/g, 'query');
-  // keyframe => @keyframe ... {
+  // @keyframe ... {
   scanRegex(/@keyframe\b[^\{]*\{/g, 'keyframe');
-  // close => }
+  // }
   scanRegex(/\}/g, 'close');
 
   tokens.sort((a, b) => a.index - b.index);
@@ -163,12 +136,12 @@ function findBlockStack(document: vscode.TextDocument, position: vscode.Position
   const stack: string[] = [];
   for (const tk of tokens) {
     if (tk.type === 'close') {
-      // เจอปิดบล็อก => pop ออก 1 ชั้น
+      // เจอ '}'
       if (stack.length > 0) {
         stack.pop();
       }
     } else {
-      // เจอบล็อกใหม่ => push เข้าสต็ก
+      // เจอเปิดบล็อก => push
       stack.push(tk.type);
     }
   }
