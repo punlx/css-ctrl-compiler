@@ -1,8 +1,8 @@
 {
   "name": "css-ctrl-compiler",
-  "displayName": "CSS-CTRL Compiler",
-  "description": "VSCode Intellisense (Autocompletion) for *.ctrl.ts files in CSS-CTRL",
-  "version": "0.2.7",
+  "displayName": "css-ctrl compiler",
+  "description": "VSCode Intellisense (Autocompletion) for *.ctrl.ts files in css-ctrl",
+  "version": "0.2.8",
   "publisher": "punlx",
   "engines": {
     "vscode": "^1.80.0"
@@ -16,12 +16,12 @@
     "commands": [
       {
         "command": "ctrl.createCtrlCssAndGenerate",
-        "title": "CSS-CTRL: Create .ctrl.css And Generate Type"
+        "title": "css-ctrl: Create .ctrl.css And Generate Type"
       }
     ],
     "configuration": {
       "type": "object",
-      "title": "CSS-CTRL Compiler Settings",
+      "title": "css-ctrl compiler settings",
       "properties": {
         "CssCtrlCompiler.themeFile": {
           "type": "string",
