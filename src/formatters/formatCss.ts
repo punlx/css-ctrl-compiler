@@ -1,3 +1,5 @@
+// src/formatters
+
 import * as prettier from 'prettier/standalone';
 import * as postcssPlugin from 'prettier/plugins/postcss';
 
