@@ -46,6 +46,9 @@ import { createBorderStyleProvider } from './createBorderStyleProvider';
 /* ------------------ (NEW) import ghostQueryDecorations ------------------ */
 import { updateQueryDecorations, registerAutoInsertSpaceWhenGt } from './ghostQueryDecorations';
 
+/* ------------------ (NEW) import for autoDeleteProvider ------------------ */
+import { createCssCtrlAutoDeleteProvider } from './autoDeleteProvider';
+
 export let globalBreakpointDict: Record<string, string> = {};
 export let globalTypographyDict: Record<string, string> = {};
 
@@ -279,6 +282,9 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(themeWillSaveDisposable);
+
+  // (NEW) createCssCtrlAutoDeleteProvider(context)
+  createCssCtrlAutoDeleteProvider(context);
 }
 
 export function deactivate() {
