@@ -1,4 +1,4 @@
-// src/formatters
+// src/formatters/formatCss.ts
 
 import * as prettier from 'prettier/standalone';
 import * as postcssPlugin from 'prettier/plugins/postcss';
