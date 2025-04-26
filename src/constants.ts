@@ -1,3 +1,5 @@
+// src/constants.ts
+
 import { pluginContainerConfigSuggestion } from './generateCssCommand/constants/pluginContainerConfig';
 import { pluginMapSuggestionList } from './generateCssCommand/constants/pluginStatesConfig';
 
@@ -1151,42 +1153,42 @@ const moreStyleForSuggestion = {
 
 export const variableAbbrSet = new Set([
   // Visibility / Direction / Writing
-  'vis', // visibility
-  'dir', // direction
+  'v', // visibility
+  'dr', // direction
   'wm', // writing-mode
 
   // Tab / Quotes / Text Emphasis
   'tab', // tab-size
-  'quotes', // quotes
+  'q', // quotes
   'tx-em-st', // text-emphasis-style
   'tx-em-c', // text-emphasis-color
-  'tx-em-pos', // text-emphasis-position
+  'tx-em-ps', // text-emphasis-position
 
   // Inset
-  'inset',
-  'inset-inline',
-  'inset-block',
-  'inset-inline-start',
-  'inset-inline-end',
-  'inset-block-start',
-  'inset-block-end',
+  'ins',
+  'ins-inline',
+  'ins-block',
+  'ins-inline-start',
+  'ins-inline-end',
+  'ins-block-start',
+  'ins-block-end',
 
   // Containment
-  'contain',
-  'contain-size', // contain-intrinsic-size
+  'cnt',
+  'cnt-s', // contain-intrinsic-size
 
   // Scroll Snap
-  'scroll-snap-type',
-  'scroll-snap-align',
-  'scroll-snap-stop',
-  'scroll-padding',
-  'scroll-margin',
+  'sc-st',
+  'sc-sa',
+  'sc-ss',
+  'sc-p',
+  'sc-m',
 
   // Accent / Caret / Scheme
   'acc', // accent-color
   'caret', // caret-color
   'fca', // forced-color-adjust
-  'cscheme', // color-scheme
+  'c-scheme', // color-scheme
   // Width / Height
   'w',
   'max-w',
@@ -1230,7 +1232,7 @@ export const variableAbbrSet = new Set([
   'bdl',
   'bdl-w',
   'br', // border-radius
-  'bd-spacing', // border-spacing
+  'bd-s', // border-spacing
 
   // Outline
   'ol',
@@ -1242,20 +1244,20 @@ export const variableAbbrSet = new Set([
   'col-gap',
   'row-gap',
   'gd-gap',
-  'gd-col-gap',
-  'gd-row-gap',
+  'gd-cg',
+  'gd-rg',
 
   // Font
   'fs', // font-size
   'fw', // font-weight
   'lh', // line-height
-  'let-sp', // letter-spacing
-  'word-sp', // word-spacing
+  'ls', // letter-spacing
+  'ws', // word-spacing
 
   // Text
   'tx-ind', // text-indent
-  'tx-shadow', // text-shadow
-  'tx-adj', // text-size-adjust
+  'tx-sd', // text-shadow
+  'tx-sa', // text-size-adjust
 
   // Z-index
   'z',
@@ -1265,43 +1267,42 @@ export const variableAbbrSet = new Set([
 
   // Flex
   'fx',
-  'fx-basis',
-  'basis',
-  'grow',
-  'shrink',
+  'fx-b',
+  'fx-g',
+  'fx-s',
 
   // Grid
   'gd',
-  'gd-area',
-  'gd-auto-cols',
-  'gd-auto-rows',
-  'gd-auto-flow',
+  'gda',
+  'gd-ac',
+  'gd-ar',
+  'gd-af',
   'gd-col',
-  'gd-col-end',
-  'gd-col-start',
+  'gd-ce',
+  'gd-cs',
   'gd-row',
-  'gd-row-end',
-  'gd-row-start',
-  'gd-temp',
-  'gd-temp-cols',
-  'gd-temp-rows',
+  'gd-re',
+  'gd-rs',
+  'gd-t',
+  'gd-tc',
+  'gd-tr',
 
   // Transform
   'tf',
-  'tf-origin',
-  'per',
-  'per-origin',
+  'tf-o',
+  'pst',
+  'pst-origin',
 
   // Transition
-  'tsn',
-  'tsn-delay',
-  'tsn-dur',
+  'ts',
+  'ts-dl',
+  'ts-d',
 
   // Animation
   'am',
-  'am-delay',
+  'am-dl',
   'am-dur',
-  'am-count',
+  'am-c',
 
   // Shadow
   'sd',
@@ -1354,12 +1355,12 @@ export const colorAbbrSet = new Set([
   'tx-sd', // text-shadow
 
   // Text decoration ที่มีสีได้
-  'tx-decor-color', // text-decoration-color
+  'tx-dc', // text-decoration-color
 
   // Filter ที่ใช้สีได้ เช่น drop-shadow
-  'fil', // filter (รองรับ filter ที่มีสี เช่น drop-shadow)
-  'bf', // backdrop-filter (บางค่ามีสี เช่น drop-shadow)
-  '-webkit-bf', // -webkit-backdrop-filter
+  'ft', // filter (รองรับ filter ที่มีสี เช่น drop-shadow)
+  'bft', // backdrop-filter (บางค่ามีสี เช่น drop-shadow)
+  '-webkit-bft', // -webkit-backdrop-filter
 
   // Mask / Clip-path บางค่าใช้สีได้ (เช่น mask-color, SVG mask ที่ใช้ fill)
   'mask', // mask (รวม mask-color)
@@ -1380,6 +1381,7 @@ export const abbrStyleMapName: Record<string, string> = {
   sq: 'square',
   'max-sq': 'max-square',
   'min-sq': 'min-square',
+  // All
   a: 'all',
   /********************************************
    * Alignment, Box, and Display
@@ -1393,13 +1395,13 @@ export const abbrStyleMapName: Record<string, string> = {
    * Animation
    ********************************************/
   am: 'animation',
-  'am-delay': 'animation-delay',
+  'am-dl': 'animation-delay',
   'am-dir': 'animation-direction',
   'am-dur': 'animation-duration',
-  'am-fill': 'animation-fill-mode',
-  'am-count': 'animation-iteration-count',
-  'am-name': 'animation-name',
-  'am-play': 'animation-play-state',
+  'am-fm': 'animation-fill-mode',
+  'am-c': 'animation-iteration-count',
+  'am-n': 'animation-name',
+  'am-p': 'animation-play-state',
   'am-timefun': 'animation-timing-function',
 
   /********************************************
@@ -1407,12 +1409,12 @@ export const abbrStyleMapName: Record<string, string> = {
    ********************************************/
   bg: 'background-color',
   'bg-img': 'background-image',
-  'bg-pos': 'background-position',
-  'bg-size': 'background-size',
-  'bg-repeat': 'background-repeat',
-  'bg-clip': 'background-clip',
-  'bg-origin': 'background-origin',
-  'bg-blend': 'background-blend-mode',
+  'bg-ps': 'background-position',
+  'bg-s': 'background-size',
+  'bg-r': 'background-repeat',
+  'bg-cp': 'background-clip',
+  'bg-o': 'background-origin',
+  'bg-b': 'background-blend-mode',
 
   /********************************************
    * Border / Outline
@@ -1444,8 +1446,8 @@ export const abbrStyleMapName: Record<string, string> = {
   'bdb-c': 'border-bottom-color',
   'bdb-st': 'border-bottom-style',
 
-  'bd-spacing': 'border-spacing',
-  'bd-collapse': 'border-collapse',
+  'bd-s': 'border-spacing',
+  'bd-cl': 'border-collapse',
   'bd-img': 'border-image',
   br: 'border-radius',
   ol: 'outline',
@@ -1493,23 +1495,23 @@ export const abbrStyleMapName: Record<string, string> = {
   'fx-s': 'flex-shrink',
 
   gd: 'grid',
-  'gd-area': 'grid-area',
-  'gd-auto-cols': 'grid-auto-columns',
-  'gd-auto-flow': 'grid-auto-flow',
-  'gd-auto-rows': 'grid-auto-rows',
+  gda: 'grid-area',
+  'gd-ac': 'grid-auto-columns',
+  'gd-af': 'grid-auto-flow',
+  'gd-ar': 'grid-auto-rows',
   'gd-col': 'grid-column',
-  'gd-col-end': 'grid-column-end',
-  'gd-col-gap': 'grid-column-gap',
-  'gd-col-start': 'grid-column-start',
+  'gd-ce': 'grid-column-end',
+  'gd-cg': 'grid-column-gap',
+  'gd-cs': 'grid-column-start',
   'gd-gap': 'grid-gap',
   'gd-row': 'grid-row',
-  'gd-row-end': 'grid-row-end',
-  'gd-row-gap': 'grid-row-gap',
-  'gd-row-start': 'grid-row-start',
-  'gd-temp': 'grid-template',
-  'gd-temp-areas': 'grid-template-areas',
-  'gd-temp-cols': 'grid-template-columns',
-  'gd-temp-rows': 'grid-template-rows',
+  'gd-re': 'grid-row-end',
+  'gd-rg': 'grid-row-gap',
+  'gd-rs': 'grid-row-start',
+  'gd-t': 'grid-template',
+  'gd-ta': 'grid-template-areas',
+  'gd-tc': 'grid-template-columns',
+  'gd-tr': 'grid-template-rows',
 
   /********************************************
    * Justify / Align / Place
@@ -1518,8 +1520,8 @@ export const abbrStyleMapName: Record<string, string> = {
   ji: 'justify-items',
   js: 'justify-self',
   pc: 'place-content',
-  pi: 'place-items',
-  ps: 'place-self',
+  pli: 'place-items',
+  pls: 'place-self',
 
   /********************************************
    * Font / Text
@@ -1543,11 +1545,11 @@ export const abbrStyleMapName: Record<string, string> = {
   'tx-sd': 'text-shadow',
   'tx-tf': 'text-transform',
   'tx-w': 'text-wrap',
-  'tx-u-pos': 'text-underline-position',
+  'tx-u-ps': 'text-underline-position',
   wb: 'word-break',
   'tx-ws': 'white-space',
 
-  'tx-adj': 'text-size-adjust',
+  'tx-sa': 'text-size-adjust',
   'tx-dl': 'text-decoration-line',
   'tx-dc': 'text-decoration-color',
   'tx-ds': 'text-decoration-style',
@@ -1570,7 +1572,7 @@ export const abbrStyleMapName: Record<string, string> = {
   h: 'height',
   'max-h': 'max-height',
   'min-h': 'min-height',
-  hp: '',
+  hp: 'hyphens',
 
   m: 'margin',
   ml: 'margin-left',
@@ -1587,7 +1589,7 @@ export const abbrStyleMapName: Record<string, string> = {
   /********************************************
    * Position
    ********************************************/
-  po: 'position',
+  ps: 'position',
   l: 'left',
   t: 'top',
   r: 'right',
@@ -1598,7 +1600,7 @@ export const abbrStyleMapName: Record<string, string> = {
    * Object
    ********************************************/
   'obj-fit': 'object-fit',
-  'obj-po': 'object-position',
+  'obj-ps': 'object-position',
 
   /********************************************
    * Aspect Ratio
@@ -1658,7 +1660,7 @@ export const abbrStyleMapName: Record<string, string> = {
   '-webkit-app': '-webkit-appearance',
 
   us: 'user-select',
-  '-webkit-sel': '-webkit-user-select',
+  '-webkit-us': '-webkit-user-select',
 
   /********************************************
    * Misc
@@ -1682,7 +1684,7 @@ export const abbrStyleMapName: Record<string, string> = {
   q: 'quotes',
   'tx-em-st': 'text-emphasis-style',
   'tx-em-c': 'text-emphasis-color',
-  'tx-em-po': 'text-emphasis-position',
+  'tx-em-ps': 'text-emphasis-position',
 
   /**
    * Inset (Logical Positioning)
@@ -1698,8 +1700,8 @@ export const abbrStyleMapName: Record<string, string> = {
   /**
    * Containment / Performance
    */
-  contain: 'contain',
-  'contain-size': 'contain-intrinsic-size',
+  cnt: 'contain',
+  'cnt-s': 'contain-intrinsic-size',
 
   /**
    * Scroll Snap
@@ -1992,7 +1994,7 @@ export const groupA = new Set([
   'tx-em-c',
   'acc',
   'caret',
-  'tx-decor-color',
+  'tx-dc',
 ]);
 export const groupB = new Set([
   'bd',

@@ -176,9 +176,9 @@ export function parseBaseStyle(
 
   // -----------------------------------------------------------------------
   // (CHANGED FOR KEYFRAME)
-  // (D*) เช็คเคส abbr = "am" / "am-name" => ถ้า propValue เริ่มต้นด้วย keyframeName => rename
+  // (D*) เช็คเคส abbr = "am" / "am-n" => ถ้า propValue เริ่มต้นด้วย keyframeName => rename
   // -----------------------------------------------------------------------
-  if (styleAbbr === 'am' || styleAbbr === 'am-name') {
+  if (styleAbbr === 'am' || styleAbbr === 'am-n') {
     // ตัวอย่าง: am[move 1s ease]
     // ให้ split ด้วยช่องว่าง แล้วดูคำแรก
     const tokens = propValue.trim().split(/\s+/);

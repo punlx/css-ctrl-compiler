@@ -5,7 +5,7 @@ import { abbrMap } from './generateCssCommand/constants/abbrMap';
 
 /**
  * createKeyframeProvider:
- * - Suggest keyframe name (my-move, pulse, etc.) เมื่อพิมพ์ "am[" หรือ "am-name["
+ * - Suggest keyframe name (my-move, pulse, etc.) เมื่อพิมพ์ "am[" หรือ "am-n["
  * - แสดง detail = keyframeName
  * - แสดง documentation = multi-line css ที่ parse จาก DSL
  * - Requirement เสริม:
@@ -32,9 +32,9 @@ export function createKeyframeProvider(keyframeDict: Record<string, string>) {
         const lineText = document.lineAt(position).text;
         const textBeforeCursor = lineText.substring(0, position.character);
 
-        // ต้องการจับ 2 รูป: "am[" กับ "am-name["
-        // => /(am|am-name)\[$/
-        const regex = /(am|am-name)\[$/;
+        // ต้องการจับ 2 รูป: "am[" กับ "am-n["
+        // => /(am|am-n)\[$/
+        const regex = /(am|am-n)\[$/;
         if (!regex.test(textBeforeCursor)) {
           return;
         }

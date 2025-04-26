@@ -138,7 +138,11 @@ function generateGeneric(sourceCode: string): string {
         const idx = m.index || 0;
         const matchText = m[1];
         // กันกรณี match $xxx ติดหน้า '--'
-        if (matchText.startsWith('$') && idx >= 2 && contentWithoutFn.slice(idx - 2, idx) === '--') {
+        if (
+          matchText.startsWith('$') &&
+          idx >= 2 &&
+          contentWithoutFn.slice(idx - 2, idx) === '--'
+        ) {
           return false;
         }
         return true;
@@ -261,9 +265,9 @@ function generateGeneric(sourceCode: string): string {
       // (C2) parse $xxx[...] + pseudo
       parseStylesIntoSet(innerContent, classMap[clsName]);
 
-      // (C3) ตรวจว่ามีการใช้ keyframe ไหม (am[...] หรือ am-name[...])
+      // (C3) ตรวจว่ามีการใช้ keyframe ไหม (am[...] หรือ am-n[...])
       {
-        const animRegex = /\bam(?:-name)?\[\s*([\w-]+)/g;
+        const animRegex = /\bam(?:-n)?\[\s*([\w-]+)/g;
         let animMatch: RegExpExecArray | null;
         while ((animMatch = animRegex.exec(innerContent)) !== null) {
           const usedKF = animMatch[1];
