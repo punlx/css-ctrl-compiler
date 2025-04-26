@@ -796,6 +796,7 @@ export const cssValues: Record<string, string[]> = {
   height: ['auto', '<length>', '<percentage>', 'max-content', 'min-content', 'fit-content'],
   'max-height': ['none', '<length>', '<percentage>', 'max-content', 'min-content', 'fit-content'],
   'min-height': ['auto', '<length>', '<percentage>', 'max-content', 'min-content', 'fit-content'],
+  hyphens: ['none', 'manual', 'auto'],
   sq: ['auto', '<length>', '<percentage>', 'max-content', 'min-content', 'fit-content'],
   'min-sq': ['auto', '<length>', '<percentage>', 'max-content', 'min-content', 'fit-content'],
   'max-sq': ['none', '<length>', '<percentage>', 'max-content', 'min-content', 'fit-content'],
@@ -1570,6 +1571,7 @@ export const abbrStyleMapName: Record<string, string> = {
   h: 'height',
   'max-h': 'max-height',
   'min-h': 'min-height',
+  hp: '',
 
   m: 'margin',
   ml: 'margin-left',
