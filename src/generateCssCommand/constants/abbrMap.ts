@@ -106,9 +106,9 @@ export const abbrMap: Record<string, string | string[]> = {
    * Columns / Gap
    ********************************************/
   cols: 'columns',
-  'col-gap': 'column-gap',
-  'row-gap': 'row-gap',
-  gap: 'gap',
+  'col-gp': 'column-gap',
+  'row-gp': 'row-gap',
+  gp: 'gap',
 
   /********************************************
    * Flex / Grid
@@ -130,7 +130,7 @@ export const abbrMap: Record<string, string | string[]> = {
   'gd-ce': 'grid-column-end',
   'gd-cg': 'grid-column-gap',
   'gd-cs': 'grid-column-start',
-  'gd-gap': 'grid-gap',
+  'gd-gp': 'grid-gap',
   'gd-row': 'grid-row',
   'gd-re': 'grid-row-end',
   'gd-rg': 'grid-row-gap',

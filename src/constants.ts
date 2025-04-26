@@ -1240,10 +1240,10 @@ export const variableAbbrSet = new Set([
   'ol-ofs',
 
   // Gap
-  'gap',
-  'col-gap',
-  'row-gap',
-  'gd-gap',
+  'gp',
+  'col-gp',
+  'row-gp',
+  'gd-gp',
   'gd-cg',
   'gd-rg',
 
@@ -1479,9 +1479,9 @@ export const abbrStyleMapName: Record<string, string> = {
    * Columns / Gap
    ********************************************/
   cols: 'columns',
-  'col-gap': 'column-gap',
-  'row-gap': 'row-gap',
-  gap: 'gap',
+  'col-gp': 'column-gap',
+  'row-gp': 'row-gap',
+  gp: 'gap',
 
   /********************************************
    * Flex / Grid
@@ -1503,7 +1503,7 @@ export const abbrStyleMapName: Record<string, string> = {
   'gd-ce': 'grid-column-end',
   'gd-cg': 'grid-column-gap',
   'gd-cs': 'grid-column-start',
-  'gd-gap': 'grid-gap',
+  'gd-gp': 'grid-gap',
   'gd-row': 'grid-row',
   'gd-re': 'grid-row-end',
   'gd-rg': 'grid-row-gap',
