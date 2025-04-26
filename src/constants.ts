@@ -110,6 +110,7 @@ export const cssValues: Record<string, string[]> = {
     'step-start',
     'step-end',
     'steps(<number>)',
+    'steps(<number>, <start|end>)',
     'cubic-bezier(<x1>, <y1>, <x2>, <y2>)',
   ],
 
@@ -726,10 +727,47 @@ export const cssValues: Record<string, string[]> = {
    ********************************************/
   filter: [
     'none',
-    '<filter-function>', // เช่น "blur(5px)", "grayscale(0.5)"
+    'blur()',
+    'brightness()',
+    'contrast()',
+    'drop-shadow()',
+    'grayscale()',
+    'hue-rotate()',
+    'invert()',
+    'opacity()',
+    'saturate()',
+    'sepia()',
+    'url()', // สำหรับกรณีที่เป็น SVG filter
   ],
-  'backdrop-filter': ['none', '<filter-function>'],
-  '-webkit-backdrop-filter': ['none', '<filter-function>'],
+
+  'backdrop-filter': [
+    'none',
+    'blur()',
+    'brightness()',
+    'contrast()',
+    'drop-shadow()',
+    'grayscale()',
+    'hue-rotate()',
+    'invert()',
+    'opacity()',
+    'saturate()',
+    'sepia()',
+    'url()', // เหมือนกัน รองรับ SVG filter ด้วย
+  ],
+  '-webkit-backdrop-filter': [
+    'none',
+    'blur()',
+    'brightness()',
+    'contrast()',
+    'drop-shadow()',
+    'grayscale()',
+    'hue-rotate()',
+    'invert()',
+    'opacity()',
+    'saturate()',
+    'sepia()',
+    'url()',
+  ],
   'mix-blend-mode': [
     'normal',
     'multiply',
@@ -832,6 +870,7 @@ export const cssValues: Record<string, string[]> = {
    * Overflow / Scroll Behavior
    ********************************************/
   overflow: ['visible', 'hidden', 'clip', 'scroll', 'auto'],
+  'overflow-wrap': ['normal', 'break-word', 'anywhere'],
   'overflow-x': ['visible', 'hidden', 'clip', 'scroll', 'auto'],
   'overflow-y': ['visible', 'hidden', 'clip', 'scroll', 'auto'],
   'scroll-behavior': ['auto', 'smooth'],
@@ -1569,6 +1608,7 @@ export const abbrStyleMapName: Record<string, string> = {
    * Overflow / Scroll Behavior
    ********************************************/
   ovf: 'overflow',
+  'ovf-w': 'overflow-wrap',
   'ovf-x': 'overflow-x',
   'ovf-y': 'overflow-y',
   'scr-beh': 'scroll-behavior',
