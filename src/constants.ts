@@ -1485,13 +1485,12 @@ export const abbrStyleMapName: Record<string, string> = {
    * Flex / Grid
    ********************************************/
   fx: 'flex',
-  'fx-basis': 'flex-basis',
-  basis: 'flex-basis', // (สำรอง ถ้าอยากใช้ basis[...] ตรง ๆ)
-  wrap: 'flex-wrap',
-  fdir: 'flex-direction',
-  flow: 'flex-flow',
-  grow: 'flex-grow',
-  shrink: 'flex-shrink',
+  'fx-b': 'flex-basis', // (สำรอง ถ้าอยากใช้ basis[...] ตรง ๆ)
+  'fx-w': 'flex-wrap',
+  'fx-d': 'flex-direction',
+  'fx-f': 'flex-flow',
+  'fx-g': 'flex-grow',
+  'fx-s': 'flex-shrink',
 
   gd: 'grid',
   'gd-area': 'grid-area',
@@ -1533,33 +1532,33 @@ export const abbrStyleMapName: Record<string, string> = {
   fv: 'font-variant',
   ffs: 'font-feature-settings',
   lh: 'line-height',
-  'let-sp': 'letter-spacing',
-  'word-sp': 'word-spacing',
+  ls: 'letter-spacing',
+  ws: 'word-spacing',
 
-  'tx-ali': 'text-align',
-  'tx-decor': 'text-decoration',
-  'tx-ind': 'text-indent',
-  'tx-jtf': 'text-justify',
+  'tx-a': 'text-align',
+  'tx-d': 'text-decoration',
+  'tx-i': 'text-indent',
+  'tx-j': 'text-justify',
   'tx-ovf': 'text-overflow',
   'tx-sd': 'text-shadow',
   'tx-tf': 'text-transform',
-  'tx-wrap': 'text-wrap',
-  'tx-unde-pos': 'text-underline-position',
-  'tx-break': 'word-break',
+  'tx-w': 'text-wrap',
+  'tx-u-pos': 'text-underline-position',
+  wb: 'word-break',
   'tx-ws': 'white-space',
 
   'tx-adj': 'text-size-adjust',
-  'tx-decor-line': 'text-decoration-line',
-  'tx-decor-color': 'text-decoration-color',
-  'tx-decor-style': 'text-decoration-style',
-  'tx-decor-skip': 'text-decoration-skip-ink',
+  'tx-dl': 'text-decoration-line',
+  'tx-dc': 'text-decoration-color',
+  'tx-ds': 'text-decoration-style',
+  'tx-dsi': 'text-decoration-skip-ink',
 
   /********************************************
    * Filter / Blend / Backdrop
    ********************************************/
-  fil: 'filter',
-  bf: 'backdrop-filter',
-  '-webkit-bf': '-webkit-backdrop-filter',
+  ft: 'filter',
+  bft: 'backdrop-filter',
+  '-webkit-bft': '-webkit-backdrop-filter',
   mbm: 'mix-blend-mode',
 
   /********************************************
@@ -1588,7 +1587,7 @@ export const abbrStyleMapName: Record<string, string> = {
   /********************************************
    * Position
    ********************************************/
-  pos: 'position',
+  po: 'position',
   l: 'left',
   t: 'top',
   r: 'right',
@@ -1599,7 +1598,7 @@ export const abbrStyleMapName: Record<string, string> = {
    * Object
    ********************************************/
   'obj-fit': 'object-fit',
-  'obj-pos': 'object-position',
+  'obj-po': 'object-position',
 
   /********************************************
    * Aspect Ratio
@@ -1613,10 +1612,10 @@ export const abbrStyleMapName: Record<string, string> = {
   'ovf-w': 'overflow-wrap',
   'ovf-x': 'overflow-x',
   'ovf-y': 'overflow-y',
-  'scr-beh': 'scroll-behavior',
-  'ovscr-beh': 'overscroll-behavior',
-  'ovscr-beh-x': 'overscroll-behavior-x',
-  'ovscr-beh-y': 'overscroll-behavior-y',
+  'sc-b': 'scroll-behavior',
+  'ovsc-b': 'overscroll-behavior',
+  'ovsc-bx': 'overscroll-behavior-x',
+  'ovsc-by': 'overscroll-behavior-y',
   rs: 'resize',
   op: 'opacity',
   /********************************************
@@ -1628,18 +1627,18 @@ export const abbrStyleMapName: Record<string, string> = {
    * Transform / Transition / Will-change
    ********************************************/
   tf: 'transform',
-  'tf-origin': 'transform-origin',
-  'tf-box': 'transform-box',
-  'tf-style': 'transform-style',
-  per: 'perspective',
-  'per-origin': 'perspective-origin',
-  'backface-vis': 'backface-visibility',
+  'tf-o': 'transform-origin',
+  'tf-b': 'transform-box',
+  'tf-s': 'transform-style',
+  pst: 'perspective',
+  'pst-o': 'perspective-origin',
+  bv: 'backface-visibility',
 
-  tsn: 'transition',
-  'tsn-delay': 'transition-delay',
-  'tsn-dur': 'transition-duration',
-  'tsn-prop': 'transition-property',
-  'tsn-fn': 'transition-timing-function',
+  ts: 'transition',
+  'ts-dl': 'transition-delay',
+  'ts-d': 'transition-duration',
+  'ts-p': 'transition-property',
+  'ts-f': 'transition-timing-function',
   wc: 'will-change',
 
   /********************************************
@@ -1649,8 +1648,8 @@ export const abbrStyleMapName: Record<string, string> = {
   'mask-img': 'mask-image',
   '-webkit-mask': '-webkit-mask',
   '-webkit-mask-img': '-webkit-mask-image',
-  'clip-path': 'clip-path',
-  '-webkit-clip-path': '-webkit-clip-path',
+  cp: 'clip-path',
+  '-webkit-cp': '-webkit-clip-path',
 
   /********************************************
    * Appearance / User-select
@@ -1672,29 +1671,29 @@ export const abbrStyleMapName: Record<string, string> = {
   /**
    * Visibility / Direction / Writing
    */
-  vis: 'visibility',
-  dir: 'direction',
+  v: 'visibility',
+  dr: 'direction',
   wm: 'writing-mode',
 
   /**
    * Tab / Quotes / Text Emphasis
    */
   tab: 'tab-size',
-  quotes: 'quotes',
+  q: 'quotes',
   'tx-em-st': 'text-emphasis-style',
   'tx-em-c': 'text-emphasis-color',
-  'tx-em-pos': 'text-emphasis-position',
+  'tx-em-po': 'text-emphasis-position',
 
   /**
    * Inset (Logical Positioning)
    */
-  inset: 'inset',
-  'inset-inline': 'inset-inline',
-  'inset-block': 'inset-block',
-  'inset-inline-start': 'inset-inline-start',
-  'inset-inline-end': 'inset-inline-end',
-  'inset-block-start': 'inset-block-start',
-  'inset-block-end': 'inset-block-end',
+  ins: 'inset',
+  'ins-i': 'inset-inline',
+  'ins-b': 'inset-block',
+  'ins-is': 'inset-inline-start',
+  'ins-ie': 'inset-inline-end',
+  'ins-bs': 'inset-block-start',
+  'ins-be': 'inset-block-end',
 
   /**
    * Containment / Performance
@@ -1705,11 +1704,11 @@ export const abbrStyleMapName: Record<string, string> = {
   /**
    * Scroll Snap
    */
-  'scroll-snap-type': 'scroll-snap-type',
-  'scroll-snap-align': 'scroll-snap-align',
-  'scroll-snap-stop': 'scroll-snap-stop',
-  'scroll-padding': 'scroll-padding',
-  'scroll-margin': 'scroll-margin',
+  'sc-st': 'scroll-snap-type',
+  'sc-sa': 'scroll-snap-align',
+  'sc-ss': 'scroll-snap-stop',
+  'sc-p': 'scroll-padding',
+  'sc-m': 'scroll-margin',
 
   /**
    * Accent / Caret / Selection / Marker
@@ -1717,7 +1716,7 @@ export const abbrStyleMapName: Record<string, string> = {
   acc: 'accent-color',
   caret: 'caret-color',
   fca: 'forced-color-adjust',
-  cscheme: 'color-scheme',
+  'c-scheme': 'color-scheme',
 };
 
 export const namedColorHex: Record<string, string> = {
