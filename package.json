@@ -2,7 +2,7 @@
   "name": "css-ctrl-compiler",
   "displayName": "css-ctrl compiler",
   "description": "VSCode Intellisense (Autocompletion) for *.ctrl.ts files in css-ctrl",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "publisher": "punlx",
   "engines": {
     "vscode": "^1.80.0"
