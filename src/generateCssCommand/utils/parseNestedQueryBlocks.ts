@@ -252,7 +252,9 @@ function mergeMultiLineParen(lines: string[]): string[] {
 
   if (buffer) {
     if (parenCount !== 0) {
-      throw new Error('[CSS-CTRL-ERR] Missing closing ")" in parentheses.');
+      throw new Error(
+        '[CSS-CTRL-ERR] Missing closing ")" in parentheses. Or there is a use of ">query" or "pseudo-function" inside which can cause an error.'
+      );
     }
     result.push(buffer);
   }

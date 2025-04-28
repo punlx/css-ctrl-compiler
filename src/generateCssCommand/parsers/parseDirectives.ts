@@ -1,23 +1,20 @@
-/* parseDirectives.ts */
-
+// src/generateCssCommand/parsers/parseDirectives.ts
 import { createEmptyStyleDef } from '../helpers/createEmptyStyleDef';
 import { parseClassBlocksWithBraceCounting } from '../helpers/parseClassBlocksWithBraceCounting';
 import { parseSingleAbbr } from './parseSingleAbbr';
-import { parseNestedQueryBlocks } from '../utils/parseNestedQueryBlocks';
+
 import {
-  IStyleDefinition,
   IClassBlock,
   IConstBlock,
   IParsedDirective,
   IParseDirectivesResult,
   IKeyframeBlock,
-  INestedQueryNode,
 } from '../types';
 
 /**
  * parseDirectives:
  *  - สแกนไฟล์หาคำสั่ง @const, @keyframe, @scope, @bind ฯลฯ
- *  - ดึง .className {...} ที่ระดับ top-level
+ *  - ดึง .className { ... } ที่ระดับ top-level
  *  - ส่งผลลัพธ์เป็น IParseDirectivesResult
  */
 export function parseDirectives(text: string): IParseDirectivesResult {
@@ -26,7 +23,6 @@ export function parseDirectives(text: string): IParseDirectivesResult {
   const constBlocks: IConstBlock[] = [];
 
   // --- ADDED FOR KEYFRAME ---
-  // เก็บ @keyframe
   const keyframeBlocks: IKeyframeBlock[] = [];
 
   let newText = text;
@@ -39,49 +35,28 @@ export function parseDirectives(text: string): IParseDirectivesResult {
   for (const m of allConstMatches) {
     const fullMatch = m[0];
     const constName = m[1];
-    const rawBlock = m[2];
+    const rawBlock = m[2]; // เนื้อใน {...}
 
     // สร้าง styleDef ว่าง
     const partialDef = createEmptyStyleDef();
 
-    // ------
-    // วิธีเก่า (flow เดิม) ที่ต้องการ: 
-    //   1) ห้ามมี @query หรือ '>' (ที่จะแปลงเป็น @query) ภายใน @const block
-    //   2) ถ้าเจอ => throw Error ทันที
-    // ------
-
-    // ขั้นแรก เรา split บรรทัดก่อน เพื่อ parse ทีละบรรทัด
-    // แล้วค่อยเช็คว่ามี pattern @query หรือ '>' หรือไม่
-    const lines = rawBlock
+    // split เป็นบรรทัด
+    const splittedLines = rawBlock
       .split('\n')
       .map((l) => l.trim())
       .filter(Boolean);
+    // (NEW) mergeMultiLineParen เพื่อรองรับ hover( ... ) / screen(...) หลายบรรทัด
+    const mergedLines = mergeMultiLineParen(splittedLines);
 
-    for (const ln of lines) {
-      // เช็คง่าย ๆ ว่ามี @query หรือไม่
-      if (ln.startsWith('@query')) {
-        throw new Error(
-          `[CSS-CTRL-ERR] @query is not allowed in @const or theme.define() block. Found: "${ln}"`
-        );
-      }
-      // เช็คว่าขึ้นต้นด้วย '>' (หรือมี '>' ในระดับ top-level)
-      // เพื่อโยน error ว่าเป็น nested query
-      // (อาจเช็ค regex ที่ซับซ้อนกว่านี้ได้ ถ้าต้องการความเป๊ะ)
-      if (/^\>\s*\S/.test(ln)) {
-        // ถ้าเจอ > .a  => error ทันที
-        throw new Error(
-          `[CSS-CTRL-ERR] @query is not allowed in @const or theme.define() block. Found: "${ln}"`
-        );
-      }
-
-      // ถ้าไม่มี > หรือ @query => parse Abbreviation ตามปกติ
-      parseSingleAbbr(ln, partialDef, /*isConstContext*/ true, /*isQueryBlock*/ false);
+    for (const ln of mergedLines) {
+      // ห้ามมี @query ใน @const => parseSingleAbbr(.. isConstContext=true, isQueryBlock=false)
+      parseSingleAbbr(ln, partialDef, /*isConstContext=*/ true, /*isQueryBlock=*/ false);
     }
 
     // เก็บเป็น IConstBlock
     constBlocks.push({ name: constName, styleDef: partialDef });
 
-    // ตัด substring ที่ match ออก เพื่อไม่ให้ไป parse ซ้ำ
+    // ตัด substring ที่ match ออก (กันไม่ให้ parse ซ้ำ)
     newText = newText.replace(fullMatch, '').trim();
   }
 
@@ -95,15 +70,14 @@ export function parseDirectives(text: string): IParseDirectivesResult {
     const keyName = keyMatch[1];
     const rawBlock = keyMatch[2];
 
-    // สร้าง IKeyframeBlock เก็บชื่อ + เนื้อหาดิบ
     keyframeBlocks.push({
       name: keyName,
       rawBlock,
     });
 
-    // ตัดส่วนที่ match ออก
+    // ตัดทิ้ง
     newText = newText.replace(fullMatch, '').trim();
-    keyframeRegex.lastIndex = 0; // reset regex
+    keyframeRegex.lastIndex = 0; // reset
   }
 
   // -----------------------------------------
@@ -121,7 +95,7 @@ export function parseDirectives(text: string): IParseDirectivesResult {
       continue;
     }
 
-    // ตรวจ @scope <name> ให้เป็น a-z0-9_-
+    // ตรวจ @scope <name> (เฉพาะ a-z0-9_-)
     if (dirName === 'scope') {
       if (dirValue !== 'none') {
         const scopeNameRegex = /^[a-zA-Z0-9_-]+$/;
@@ -139,7 +113,7 @@ export function parseDirectives(text: string): IParseDirectivesResult {
   }
 
   // -----------------------------------------
-  // (4) parse .className { ... } ที่เหลือ
+  // (4) parse .className { ... } ที่เหลือ (ระดับ top-level)
   // -----------------------------------------
   const blocks = parseClassBlocksWithBraceCounting(newText);
   for (const blk of blocks) {
@@ -152,4 +126,70 @@ export function parseDirectives(text: string): IParseDirectivesResult {
     constBlocks,
     keyframeBlocks,
   };
+}
+
+/**
+ * mergeMultiLineParen
+ * ฟังก์ชันสำหรับรวมหลายบรรทัดที่ยังอยู่ใน (...) ให้เป็น 1 บรรทัด
+ * - พร้อมตรวจว่า (1) ห้ามมีวงเล็บซ้อน
+ * - (2) ห้ามมี '{' / '>' / '@query' ภายใน (...), ตามแบบเดียวกับ .className
+ */
+function mergeMultiLineParen(rawLines: string[]): string[] {
+  const result: string[] = [];
+  let buffer = '';
+  let parenCount = 0;
+
+  for (const line of rawLines) {
+    const trimmed = line.trim();
+
+    // สแกนทีละตัวอักษร
+    for (let i = 0; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (ch === '(') {
+        if (parenCount > 0) {
+          throw new Error(
+            `[CSS-CTRL-ERR] Nested parentheses not allowed in @const. Found: "${trimmed}"`
+          );
+        }
+        parenCount++;
+      } else if (ch === ')') {
+        parenCount--;
+      }
+    }
+
+    // ถ้า parenCount > 0 => ห้ามมี '{', '>', '@query'
+    if (parenCount > 0) {
+      if (trimmed.includes('>') || trimmed.includes('@query')) {
+        throw new Error(
+          `[CSS-CTRL-ERR] '>' or '@query' not allowed in (...). Found: "${trimmed}" (in @const)`
+        );
+      }
+    }
+
+    if (!buffer) {
+      buffer = trimmed;
+    } else {
+      buffer += ' ' + trimmed;
+    }
+
+    if (parenCount <= 0 && buffer) {
+      if (parenCount < 0) {
+        throw new Error(`[CSS-CTRL-ERR] Extra ")" found in @const. Line: "${trimmed}"`);
+      }
+      result.push(buffer);
+      buffer = '';
+      parenCount = 0;
+    }
+  }
+
+  if (buffer) {
+    if (parenCount !== 0) {
+      throw new Error(
+        '[CSS-CTRL-ERR] Missing closing ")" in @const parentheses. Or there is a use of ">query" or "pseudo-function" inside which can cause an error.'
+      );
+    }
+    result.push(buffer);
+  }
+
+  return result;
 }
