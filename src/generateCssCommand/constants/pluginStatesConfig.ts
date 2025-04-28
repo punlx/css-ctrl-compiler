@@ -51,7 +51,7 @@ const pluginStates = Object.entries(pluginStatesConfig).flatMap(([key, val]) => 
     return {
       pseudos: `:${name}`,
       arrMapSuggestion: {
-        [name]: `${name} (${key === 'role' ? 'role' : 'state'})`,
+        [name]: `${name} ${key === 'role' ? 'role' : 'plugin'}`,
       },
     };
   });
