@@ -2,6 +2,10 @@
 
 import * as vscode from 'vscode';
 
+// เพิ่มมาใหม่: import constants สำหรับเช็ค pseudo function
+import { knownStates } from './generateCssCommand/constants/knownStates';
+import { supportedPseudos } from './generateCssCommand/constants/supportedPseudos';
+
 export const indentUnit = '  ';
 
 // ----------------------------------------------------------
@@ -15,33 +19,22 @@ function transformAngleBracketsLineBased(text: string): string {
 
   for (const line of lines) {
     const trimmed = line.trim();
-
-    // ถ้าบรรทัดนี้ (หลัง trim) ขึ้นต้นด้วย '>'
-    // ให้นับว่ามีกี่ตัวต่อเนื่อง (เช่น ">>" => 2 ตัว)
     if (trimmed.startsWith('>')) {
       const lineIndentMatch = /^(\s*)/.exec(line);
       const lineIndent = lineIndentMatch ? lineIndentMatch[1] : '';
-
       let countGT = 1;
       let j = 1;
       while (j < trimmed.length && trimmed[j] === '>') {
         j++;
         countGT++;
       }
-      const leftover = trimmed.slice(countGT); // ส่วนต่อจาก '>' ทั้งหมด
-
-      // สร้างสายอักขระแทนที่:
-      //  - "@query/*__angleN__*/"
-      //  - ถ้ามี leftover => ใส่ต่อท้าย (พร้อมเว้นวรรคหนึ่งช่อง)
-      // ตัวอย่าง: "> > div {" => "@query/*__angle2__*/ div {"
+      const leftover = trimmed.slice(countGT);
       let replacedLine = lineIndent + `@query/*__angle${countGT}__*/`;
       if (leftover) {
         replacedLine += ' ' + leftover.trimStart();
       }
-
       newLines.push(replacedLine);
     } else {
-      // บรรทัดอื่น ไม่ยุ่ง
       newLines.push(line);
     }
   }
@@ -55,28 +48,109 @@ function transformAngleBracketsLineBased(text: string): string {
 //    "@query/*__angleN__*/" อยู่ ให้แปลงกลับเป็น '>' N ตัว
 // ----------------------------------------------------------
 function revertAngleMarkerToGt(text: string): string {
-  // เราจะหา pattern @query/*__angle(\d+)__*/
-  // แล้วแทนที่ด้วย '>' * n
   const re = /@query\/\*__angle(\d+)__\*\//g;
-
   return text.replace(re, (_, digits) => {
     const n = parseInt(digits, 10);
     return '>'.repeat(n);
   });
 }
 
+// ----------------------------------------------------------
+// (ฟังก์ชันใหม่) สำหรับ format multi-line pseudo function เช่น hover(...), focus(...), etc.
+// ----------------------------------------------------------
+function formatPseudoFunctions(code: string): string {
+  const allPseudoNames = [
+    ...knownStates,
+    ...supportedPseudos,
+    'screen',
+    'container',
+    'option-active',
+    'option-selected',
+    'option-unselected',
+    'option-disabled',
+    'accordion-active',
+    'accordion-expanded',
+    'accordion-collapsed',
+    'accordion-disabled',
+  ];
+  let i = 0;
+  const text = code;
+  const len = text.length;
+  let result = '';
+
+  while (i < len) {
+    let foundIndex = -1;
+    let foundName = '';
+    for (const pseudoName of allPseudoNames) {
+      const idx = text.indexOf(pseudoName + '(', i);
+      if (idx !== -1 && (foundIndex === -1 || idx < foundIndex)) {
+        foundIndex = idx;
+        foundName = pseudoName;
+      }
+    }
+    if (foundIndex === -1) {
+      result += text.slice(i);
+      break;
+    } else {
+      result += text.slice(i, foundIndex);
+      const openParenPos = foundIndex + foundName.length;
+      let depth = 0;
+      let endParen = -1;
+      for (let j = openParenPos; j < len; j++) {
+        const ch = text[j];
+        if (ch === '(') {
+          depth++;
+        } else if (ch === ')') {
+          depth--;
+          if (depth === 0) {
+            endParen = j;
+            break;
+          }
+        }
+      }
+      if (endParen === -1) {
+        result += text.slice(foundIndex);
+        break;
+      } else {
+        const inside = text.slice(openParenPos + 1, endParen);
+        const prefix = text.slice(foundIndex, openParenPos + 1);
+        const linesSoFar = result.split('\n');
+        const lastLine = linesSoFar[linesSoFar.length - 1];
+        const matchIndent = /^(\s*)/.exec(lastLine);
+        const baseIndent = matchIndent ? matchIndent[1] : '';
+        const formattedInside = formatInsidePseudo(inside, baseIndent + indentUnit);
+        result += prefix.trimEnd() + '\n';
+        result += formattedInside + '\n';
+        result += baseIndent + ')';
+        i = endParen + 1;
+      }
+    }
+  }
+
+  return result;
+}
+
+function formatInsidePseudo(content: string, indent: string): string {
+  const lines = content
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const formatted = lines.map((l) => indent + l);
+  return formatted.join('\n');
+}
+
 // generateGeneric.ts
 function generateGeneric(sourceCode: string): string {
   // ---------------------------------------------------------------------------
-  // 1) หา css`...` (บล็อกแรก) ด้วย Regex ที่จับ prefix + เนื้อหาใน backtick
+  // 1) หา css... (บล็อกแรก) ด้วย Regex ที่จับ prefix + เนื้อหาใน backtick
   // ---------------------------------------------------------------------------
-  const cssRegex = /\b(css\s*(?:<[^>]*>)?)`([^`]*)`/gs;
+  const cssRegex = /(css\s*(?:<[^>]*>)?)\s*`([^]*?)`/gs;
   const match = cssRegex.exec(sourceCode);
   if (!match) return sourceCode;
 
-  const fullMatch = match[0]; // ตัวเต็ม "css ... ` ... `"
+  const fullMatch = match[0];
   const prefix = match[1]; // "css" หรือ "css<...>"
-  let templateContent = match[2]; // โค้ดภายใน backtick
+  let templateContent = match[2]; // เนื้อหาใน backtick
 
   // ---------------------------------------------------------------------------
   // (Pass 1) Pre-process: เปลี่ยน '>' ต้นบรรทัดเป็น @query/*__angleN__*/
@@ -94,19 +168,14 @@ function generateGeneric(sourceCode: string): string {
   // 3) ฟังก์ชัน parse $xxx[...] (รวม pseudo)
   // ---------------------------------------------------------------------------
   function parseStylesIntoSet(content: string, targetSet: Set<string>) {
-    // ---------- A) จัดการ pseudo function ----------
     const pseudoFnRegex =
       /\b(hover|focus|active|focus-within|focus-visible|target|disabled|enabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid|before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|screen|container|option-active|option-selected|option-unselected|option-disabled|accordion-active|accordion-expanded|accordion-collapsed|accordion-disabled)\s*\(([^)]*)\)/g;
     let fnMatch: RegExpExecArray | null;
-
     while ((fnMatch = pseudoFnRegex.exec(content)) !== null) {
       const pseudoFn = fnMatch[1];
       const inside = fnMatch[2];
-
-      // หา $xxx[...] หรือ --&xxx[...]
       const styleMatches = [...inside.matchAll(/(\$[\w-]+|--&[\w-]+)\[/g)]
         .filter((m) => {
-          // กรองกรณีพิเศษ: ถ้าเจอ "--$" ต่อกัน
           const idx = m.index || 0;
           const matchText = m[1];
           if (matchText.startsWith('$') && idx >= 2 && inside.slice(idx - 2, idx) === '--') {
@@ -115,8 +184,6 @@ function generateGeneric(sourceCode: string): string {
           return true;
         })
         .map((m) => m[1]);
-
-      // **เปลี่ยน** ให้ `$bg => "bg"`, `--&local => "local"` ก่อนค่อย + pseudoFn
       for (const styleName of styleMatches) {
         if (styleName.startsWith('$')) {
           const raw = styleName.slice(1);
@@ -127,17 +194,13 @@ function generateGeneric(sourceCode: string): string {
         }
       }
     }
-
-    // ---------- B) หลังตัด pseudoFn ----------
     const pseudoFnRegexForRemove =
       /\b(?:hover|focus|active|focus-within|focus-visible|target|disabled|enabled|read-only|read-write|required|optional|checked|indeterminate|valid|invalid|in-range|out-of-range|placeholder-shown|default|link|visited|user-invalid|before|after|placeholder|selection|file-selector-button|first-letter|first-line|marker|backdrop|spelling-error|grammar-error|screen|container|option-active|option-selected|option-unselected|option-disabled|accordion-active|accordion-expanded|accordion-collapsed|accordion-disabled)\s*\(([^)]*)\)/g;
     const contentWithoutFn = content.replace(pseudoFnRegexForRemove, '');
-
     const directMatches = [...contentWithoutFn.matchAll(/(\$[\w-]+|--&[\w-]+)\[/g)]
       .filter((m) => {
         const idx = m.index || 0;
         const matchText = m[1];
-        // กันกรณี match $xxx ติดหน้า '--'
         if (
           matchText.startsWith('$') &&
           idx >= 2 &&
@@ -148,7 +211,6 @@ function generateGeneric(sourceCode: string): string {
         return true;
       })
       .map((m) => m[1]);
-
     for (const styleName of directMatches) {
       if (styleName.startsWith('$')) {
         targetSet.add(styleName.slice(1));
@@ -171,7 +233,6 @@ function generateGeneric(sourceCode: string): string {
       const fromToStep = mm[3];
       const inside = mm[2] || mm[4] || '';
       const stepLabel = numericStep || fromToStep || '';
-
       const varRegex = /\$([\w-]+)/g;
       let varMatch: RegExpExecArray | null;
       while ((varMatch = varRegex.exec(inside)) !== null) {
@@ -220,32 +281,22 @@ function generateGeneric(sourceCode: string): string {
     while ((classMatch = classRegex.exec(templateContent)) !== null) {
       const clsName = classMatch[1];
       const innerContent = classMatch[2];
-
       const matchIndex = classMatch.index;
-
       let lineStart = templateContent.lastIndexOf('\n', matchIndex);
       if (lineStart === -1) {
         lineStart = 0;
       }
-
       let lineEnd = templateContent.indexOf('\n', matchIndex);
       if (lineEnd === -1) {
         lineEnd = templateContent.length;
       }
-
       const lineContent = templateContent.slice(lineStart, lineEnd);
-
-      // --- (B) ถ้ามี @query -> skip
       if (lineContent.includes('@query')) {
         continue;
       }
-
-      // --- (C) ถ้าไม่ skip => เก็บใน classMap
       if (!classMap[clsName]) {
         classMap[clsName] = new Set();
       }
-
-      // (C1) @use ...
       {
         const useRegex = /@use\s+([^\{\}\n]+)/g;
         let useMatch: RegExpExecArray | null;
@@ -261,11 +312,7 @@ function generateGeneric(sourceCode: string): string {
           }
         }
       }
-
-      // (C2) parse $xxx[...] + pseudo
       parseStylesIntoSet(innerContent, classMap[clsName]);
-
-      // (C3) ตรวจว่ามีการใช้ keyframe ไหม (am[...] หรือ am-n[...])
       {
         const animRegex = /\bam(?:-n)?\[\s*([\w-]+)/g;
         let animMatch: RegExpExecArray | null;
@@ -304,7 +351,6 @@ function generateGeneric(sourceCode: string): string {
         i++;
         continue;
       }
-
       if (trimmed.startsWith('@scope ')) {
         scopeLines.push(normalizeDirectiveLine(trimmed));
         i++;
@@ -334,7 +380,6 @@ function generateGeneric(sourceCode: string): string {
         constBlocks.push(blockLines);
         continue;
       }
-
       normalLines.push(trimmed);
       i++;
     }
@@ -378,7 +423,6 @@ function generateGeneric(sourceCode: string): string {
   // 10) ฟอร์แมต (@const block + .box block + directive) ตาม logic เดิม
   // ---------------------------------------------------------------------------
   const formattedConstBlocks: string[][] = [];
-
   for (const block of constBlocks) {
     const temp: string[] = [];
     let firstLine = true;
@@ -412,18 +456,15 @@ function generateGeneric(sourceCode: string): string {
   }
 
   const finalLines: string[] = [];
-  // @scope
   for (const s of scopeLines) {
     finalLines.push(`${indentUnit}${s}`);
   }
-  // @bind
   for (const b of bindLines) {
     finalLines.push(`${indentUnit}${b}`);
   }
   if (scopeLines.length > 0 || bindLines.length > 0) {
     finalLines.push('');
   }
-
   formattedConstBlocks.forEach((block, idx) => {
     if (idx > 0) {
       finalLines.push('');
@@ -433,19 +474,23 @@ function generateGeneric(sourceCode: string): string {
   if (formattedConstBlocks.length > 0) {
     finalLines.push('');
   }
-
   finalLines.push(...formattedBlockLines);
 
   // (Pass ที่ 2.1) ได้ finalBlock หลัง format
   const finalBlock = finalLines.join('\n');
 
+  // (Pass ที่ 2.1.1) จัดการ format pseudo function หลายบรรทัด
+  const finalBlockPseudo = formatPseudoFunctions(finalBlock);
+
   // (Pass ที่ 2.2) จัด indent @query
-  const finalBlock2 = unifiedQueryIndent(finalBlock);
+  const finalBlock2 = unifiedQueryIndent(finalBlockPseudo);
 
   // (Pass ที่ 2.3) แปลง @query/*__angleN__*/ กลับเป็น '>' N ตัว
   const finalBlock3 = revertAngleMarkerToGt(finalBlock2);
 
+  // *** ใส่ backtick เปิด-ปิด กลับไป ***
   const newStyledBlock = `${newPrefix}\`\n${finalBlock3}\n\``;
+
   return sourceCode.replace(fullMatch, newStyledBlock);
 
   // ---------------------------------------------------------------------------
@@ -454,7 +499,6 @@ function generateGeneric(sourceCode: string): string {
   function unifiedQueryIndent(code: string): string {
     const lines = code.split('\n');
     const newLines: string[] = [];
-
     let depth = 0;
 
     function countQueryOpens(line: string): number {
@@ -468,21 +512,17 @@ function generateGeneric(sourceCode: string): string {
 
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i];
-
       const trimmed = line.trim();
       if (/^@query\b.*\{/.test(trimmed)) {
         if (newLines.length > 0 && newLines[newLines.length - 1].trim() !== '') {
           newLines.push('');
         }
       }
-
       const matchIndent = /^(\s*)/.exec(line);
       const oldIndent = matchIndent ? matchIndent[1] : '';
       const content = line.slice(oldIndent.length);
-
       const newIndent = indentUnit.repeat(depth);
       line = oldIndent + newIndent + content;
-
       newLines.push(line);
 
       let openCount = countQueryOpens(line);
@@ -490,7 +530,6 @@ function generateGeneric(sourceCode: string): string {
         depth++;
         openCount--;
       }
-
       let closeCount = countCloseBraces(line);
       while (closeCount > 0 && depth > 0) {
         depth--;
@@ -511,17 +550,12 @@ export const generateGenericProvider = vscode.commands.registerCommand(
       vscode.window.showErrorMessage('No active text editor');
       return;
     }
-
-    // ตรวจว่าไฟล์ลงท้าย .ctrl.ts
     const doc = editor.document;
     if (!doc.fileName.endsWith('.ctrl.ts')) {
       return;
     }
-
     const fullText = doc.getText();
     const newText = generateGeneric(fullText);
-
-    // apply edit
     const edit = new vscode.WorkspaceEdit();
     const fullRange = new vscode.Range(doc.positionAt(0), doc.positionAt(fullText.length));
     edit.replace(doc.uri, fullRange, newText);
