@@ -6,12 +6,9 @@ import { mergeStyleDef } from '../utils/mergeStyleDef';
 import { createEmptyStyleDef } from '../helpers/createEmptyStyleDef';
 
 import { parseNestedQueryBlocks } from '../utils/parseNestedQueryBlocks';
-
-// (REMOVED) import transformVariables & transformLocalVariables
 import { transformVariables } from '../transformers/transformVariables';
 import { transformLocalVariables } from '../transformers/transformLocalVariables';
 
-// (REMOVED) No more direct transformVariables or transformLocalVariables here
 import { makeFinalName } from '../utils/sharedScopeUtils';
 
 /**
@@ -28,12 +25,17 @@ function parseNestedQueryDef(
   keyframeNameMap?: Map<string, string>
 ) {
   const out = [];
+
   for (const node of queries) {
     const subDef = createEmptyStyleDef();
 
+    // เรียก mergeMultiLineParen กับ node.rawLines
+    const mergedLines = mergeMultiLineParen(node.rawLines);
+
     const usedConstNames: string[] = [];
     const normalLines: string[] = [];
-    for (const ln of node.rawLines) {
+
+    for (const ln of mergedLines) {
       if (ln.startsWith('@use ')) {
         usedConstNames.push(...ln.replace('@use', '').trim().split(/\s+/));
       } else {
@@ -74,6 +76,7 @@ function parseNestedQueryDef(
       children: childrenParsed,
     });
   }
+
   return out;
 }
 
@@ -110,9 +113,13 @@ export function processClassBlocks(
 
     const { lines, queries } = parseNestedQueryBlocks(block.body);
 
+    // เพิ่มขั้นตอน mergeMultiLineParen ให้ lines
+    const mergedLines = mergeMultiLineParen(lines);
+
     let usedConstNames: string[] = [];
     const normalLines: string[] = [];
-    for (const ln of lines) {
+
+    for (const ln of mergedLines) {
       if (ln.startsWith('@use ')) {
         usedConstNames.push(...ln.replace('@use', '').trim().split(/\s+/));
       } else {
@@ -164,4 +171,74 @@ export function processClassBlocks(
   }
 
   return { classMap, shortNameToFinal };
+}
+
+/**
+ * mergeMultiLineParen
+ * ฟังก์ชันสำหรับรวมหลายบรรทัดที่ยังอยู่ในวงเล็บเปิด '(' แต่ยังไม่เจอ ')' ครบ
+ * เพื่อรองรับการเขียนแบบหลายบรรทัดใน hover( ... ), screen( ... ) ฯลฯ
+ * และ handle error:
+ *   (1) ห้ามมีวงเล็บซ้อน (...) ใน (...)
+ *   (2) ห้ามมี '>' หรือ '@query' ภายใน (...)
+ */
+function mergeMultiLineParen(lines: string[]): string[] {
+  const result: string[] = [];
+  let buffer = '';
+  let parenCount = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // สแกนทีละตัวอักษร
+    for (let i = 0; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+
+      if (ch === '(') {
+        // ถ้า parenCount > 0 => แสดงว่ากำลังอยู่ใน (...) แล้วเจอ '(' อีก => ซ้อน
+        if (parenCount > 0) {
+          throw new Error(`[CSS-CTRL-ERR] Nested parentheses not allowed. Found: "${trimmed}"`);
+        }
+        parenCount++;
+      } else if (ch === ')') {
+        parenCount--;
+      }
+    }
+
+    // ถ้า parenCount > 0 => เราอยู่ในวงเล็บ => ห้ามมี '>' หรือ '@query'
+    if (parenCount > 0) {
+      if (trimmed.includes('>') || trimmed.includes('@query')) {
+        throw new Error(
+          `[CSS-CTRL-ERR] ">" or "@query" not allowed inside (...). Found: "${trimmed}"`
+        );
+      }
+    }
+
+    if (!buffer) {
+      buffer = trimmed;
+    } else {
+      buffer += ' ' + trimmed;
+    }
+
+    // ถ้า parenCount <= 0 => ครบแล้ว => push buffer
+    if (parenCount <= 0 && buffer) {
+      // ถ้า parenCount < 0 => เจอ ) เกิน
+      if (parenCount < 0) {
+        throw new Error(`[CSS-CTRL-ERR] Extra ")" found. Line: "${trimmed}"`);
+      }
+      result.push(buffer);
+      buffer = '';
+      parenCount = 0;
+    }
+  }
+
+  // ถ้ายังเหลือ buffer ค้างอยู่
+  if (buffer) {
+    if (parenCount !== 0) {
+      // ถ้า parenCount != 0 => เปิดไม่ปิด
+      throw new Error('[CSS-CTRL-ERR] Missing closing ")" in parentheses.');
+    }
+    result.push(buffer);
+  }
+
+  return result;
 }

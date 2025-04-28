@@ -27,28 +27,20 @@ function transformAngleBracketsToQuery(body: string): string {
     } else if (c === '}') {
       braceCount--;
       if (braceCount < 0) {
-        braceCount = 0; // กันกรณี } เกิน
+        braceCount = 0; // กันกรณี }
       }
     }
 
     // เช็คเฉพาะ top-level (braceCount === 0) และเจอ '>'
     if (braceCount === 0 && c === '>') {
-      // นับว่ามี '>' ติดกันกี่ตัว
       let countGT = 1;
       let j = i + 1;
       while (j < body.length && body[j] === '>') {
         countGT++;
         j++;
       }
-
-      // ข้าม '>' เหล่านั้นใน source
       i += countGT;
-
-      // เขียน "@query" ลงใน out
       out += '@query';
-
-      // ถ้าพบว่ามี '>' มากกว่า 1 ตัว => ใส่ space แล้วตามด้วย '>' ที่เหลือ (countGT - 1)
-      // เช่น ">> div" => แทนเป็น "@query > div"
       if (countGT > 1) {
         out += ' ' + '>'.repeat(countGT - 1);
       } else {
@@ -57,12 +49,50 @@ function transformAngleBracketsToQuery(body: string): string {
       continue;
     }
 
-    // กรณีทั่วไป
     out += c;
     i++;
   }
 
   return out;
+}
+
+/**
+ * ถ้ามีเคส :option-active / &:option-active => ให้แปลงเป็น class pluginStatesConfig
+ * เช่น :option-active => ' .listboxPlugin-active'
+ */
+function maybeTransformPluginQuerySelector(rawSelector: string): string {
+  const trimmed = rawSelector.trim();
+
+  if (trimmed.startsWith(':') || trimmed.startsWith('&:')) {
+    const useDescendant = trimmed.startsWith(':');
+    let namePart = useDescendant ? trimmed.slice(1) : trimmed.slice(2);
+
+    const dashPos = namePart.indexOf('-');
+    if (dashPos > 0) {
+      const prefix = namePart.slice(0, dashPos);
+      const suffix = namePart.slice(dashPos + 1);
+
+      if (pluginStatesConfig[prefix] && pluginStatesConfig[prefix][suffix]) {
+        const pluginCls = pluginStatesConfig[prefix][suffix];
+        if (useDescendant) {
+          if (pluginCls.startsWith('[')) {
+            return ` ${pluginCls}`;
+          } else {
+            return ` .${pluginCls.replace(/^\./, '')}`;
+          }
+        } else {
+          if (pluginCls.startsWith('[')) {
+            return `&${pluginCls}`;
+          } else {
+            const stripped = pluginCls.replace(/^\./, '');
+            return `&.${stripped}`;
+          }
+        }
+      }
+    }
+  }
+
+  return trimmed;
 }
 
 /**
@@ -72,7 +102,7 @@ function transformAngleBracketsToQuery(body: string): string {
  *  - เก็บโหนด @query ไว้ใน queries[]
  */
 export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult {
-  // เรียกฟังก์ชัน Pre-process เพื่อแปลง '>' => '@query' ก่อน
+  // เรียกฟังก์ชัน Pre-process เพื่อแปลง '>' => '@query'
   body = transformAngleBracketsToQuery(body);
 
   const lines: string[] = [];
@@ -82,28 +112,31 @@ export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult
   while (i < body.length) {
     const queryIdx = body.indexOf('@query', i);
     if (queryIdx === -1) {
-      // ไม่มี @query อีก
       const leftover = body.slice(i).trim();
       if (leftover) {
-        lines.push(
-          ...leftover
-            .split('\n')
-            .map((l) => l.trim())
-            .filter(Boolean)
-        );
+        // split leftover
+        let leftoverLines = leftover
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean);
+
+        // merge paren line
+        leftoverLines = mergeMultiLineParen(leftoverLines);
+        lines.push(...leftoverLines);
       }
       break;
     }
 
-    // เก็บส่วนก่อนหน้า (ที่ไม่ใช่ @query) ลง lines[]
+    // chunkBefore => ส่วนก่อนหน้า @query
     const chunkBefore = body.slice(i, queryIdx).trim();
     if (chunkBefore) {
-      lines.push(
-        ...chunkBefore
-          .split('\n')
-          .map((l) => l.trim())
-          .filter(Boolean)
-      );
+      let chunkLines = chunkBefore
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      chunkLines = mergeMultiLineParen(chunkLines);
+      lines.push(...chunkLines);
     }
 
     // parse "@query <selector> { ... }"
@@ -122,12 +155,7 @@ export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult
       throw new Error('[CSS-CTRL-ERR] parseNestedQueryBlocks: missing selector after @query.');
     }
 
-    // (A) ตรวจจับเคส "@scope" เปล่าๆ
-    if (/@scope(\s|$|\{)/.test(rawSelector)) {
-      throw new Error('[CSS-CTRL-ERR] parseNestedQueryBlocks: missing className after "@scope."');
-    }
-
-    // (B) replace "@scope.xxx" => SCOPE_REF(xxx)
+    // replace "@scope.xxx" => SCOPE_REF(xxx)
     rawSelector = rawSelector.replace(/@scope\.([\w-]+)/g, (_m, className) => {
       if (!className) {
         throw new Error('[CSS-CTRL-ERR] parseNestedQueryBlocks: missing className after @scope.');
@@ -135,83 +163,99 @@ export function parseNestedQueryBlocks(body: string): IParsedNestedQueriesResult
       return `SCOPE_REF(${className})`;
     });
 
-    // (NEW) แปลง selector รูปแบบ :option-active / &:option-active => .listboxPlugin-active ฯลฯ
+    // แปลง :option-active / &:option-active => plugin class
     rawSelector = maybeTransformPluginQuerySelector(rawSelector);
 
     // นับหาจุดจบของบล็อก { ... }
-    let braceCount = 1;
+    let nested = 1;
     let j = braceOpenIdx + 1;
     for (; j < body.length; j++) {
-      if (body[j] === '{') {
-        braceCount++;
-      } else if (body[j] === '}') {
-        braceCount--;
-      }
-      if (braceCount === 0) {
+      if (body[j] === '{') nested++;
+      else if (body[j] === '}') nested--;
+      if (nested === 0) {
         break;
       }
     }
-    if (braceCount !== 0) {
+    if (nested !== 0) {
       throw new Error('[CSS-CTRL-ERR] parseNestedQueryBlocks: missing closing "}".');
     }
 
-    // innerBody = เนื้อหาภายใน { ... }
     const innerBody = body.slice(braceOpenIdx + 1, j).trim();
 
     // parse child query (recursive)
     const childResult = parseNestedQueryBlocks(innerBody);
 
-    // @ts-ignore
     queries.push({
       selector: rawSelector,
       rawLines: childResult.lines,
+      styleDef: undefined as any, // ไปกำหนดทีหลัง
       children: childResult.queries,
     });
 
-    i = j + 1; // ขยับ index ต่อหลัง '}'
+    i = j + 1;
   }
 
   return { lines, queries };
 }
 
 /**
- * ถ้ามีเคส :option-active / &:option-active => ให้แปลงเป็น class pluginStatesConfig
- * เช่น :option-active => ' .listboxPlugin-active'
+ * mergeMultiLineParen
+ * ฟังก์ชันเหมือนใน processClassBlocks แต่เพิ่มการ handle error:
+ *   (1) ห้ามมีวงเล็บซ้อน
+ *   (2) ห้ามมี '>' หรือ '@query' ภายใน (...)
  */
-function maybeTransformPluginQuerySelector(rawSelector: string): string {
-  const trimmed = rawSelector.trim();
+function mergeMultiLineParen(lines: string[]): string[] {
+  const result: string[] = [];
+  let buffer = '';
+  let parenCount = 0;
 
-  // ตรวจจับเคส :xxx-yyy หรือ &:xxx-yyy
-  if (trimmed.startsWith(':') || trimmed.startsWith('&:')) {
-    const useDescendant = trimmed.startsWith(':');
-    let namePart = useDescendant ? trimmed.slice(1) : trimmed.slice(2);
+  for (const line of lines) {
+    const trimmed = line.trim();
 
-    const dashPos = namePart.indexOf('-');
-    if (dashPos > 0) {
-      const prefix = namePart.slice(0, dashPos);
-      const suffix = namePart.slice(dashPos + 1);
-
-      if (pluginStatesConfig[prefix] && pluginStatesConfig[prefix][suffix]) {
-        const pluginCls = pluginStatesConfig[prefix][suffix];
-        if (useDescendant) {
-          // case ":..."
-          if (pluginCls.startsWith('[')) {
-            return ` ${pluginCls}`;
-          } else {
-            return ` .${pluginCls.replace(/^\./, '')}`;
-          }
-        } else {
-          // case "&:..."
-          if (pluginCls.startsWith('[')) {
-            return `&${pluginCls}`;
-          } else {
-            const stripped = pluginCls.replace(/^\./, '');
-            return `&.${stripped}`;
-          }
+    // เดินเช็คทีละตัว
+    for (let i = 0; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (ch === '(') {
+        if (parenCount > 0) {
+          throw new Error(`[CSS-CTRL-ERR] Nested parentheses not allowed in: "${trimmed}"`);
         }
+        parenCount++;
+      } else if (ch === ')') {
+        parenCount--;
       }
+    }
+
+    // ถ้า parenCount > 0 => อยู่ใน (...), ห้ามมี '>' หรือ '@query'
+    if (parenCount > 0) {
+      if (trimmed.includes('>') || trimmed.includes('@query')) {
+        throw new Error(
+          `[CSS-CTRL-ERR] ">" or "@query" not allowed inside (...). Found: "${trimmed}"`
+        );
+      }
+    }
+
+    if (!buffer) {
+      buffer = trimmed;
+    } else {
+      buffer += ' ' + trimmed;
+    }
+
+    if (parenCount <= 0 && buffer) {
+      if (parenCount < 0) {
+        throw new Error(`[CSS-CTRL-ERR] Extra ")" found. Line: "${trimmed}"`);
+      }
+      result.push(buffer);
+      buffer = '';
+      parenCount = 0;
     }
   }
 
-  return trimmed;
+  if (buffer) {
+    if (parenCount !== 0) {
+      throw new Error('[CSS-CTRL-ERR] Missing closing ")" in parentheses.');
+    }
+    result.push(buffer);
+  }
+
+  return result;
 }
