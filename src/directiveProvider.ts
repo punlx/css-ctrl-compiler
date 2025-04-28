@@ -39,7 +39,7 @@ export function createDirectiveProvider() {
         if (stack.includes('class')) {
           return [
             makeItem('use', 'CSS-CTRL directive @use (in class)'),
-            makeItem('query', 'CSS-CTRL directive @query (in class)'),
+            // makeItem('query', 'CSS-CTRL directive @query (in class)'),
           ];
         }
 
