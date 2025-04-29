@@ -178,10 +178,6 @@ export function parseNestedQueryBlocks(body: string): {
 }
 
 /**
- * transformAngleBracketsToQuery เหมือนเดิม
- */
-
-/**
  * (CHANGED) mergeLineForQueryBlock
  * เวอร์ชันที่ยอมให้มีวงเล็บ CSS function ใน property value
  */
@@ -228,6 +224,14 @@ function mergeLineForQueryBlock(lines: string[]): string[] {
       if (parenCount < 0) {
         throw new Error(`[CSS-CTRL-ERR] Extra ")" found. in query block. Line: "${trimmed}"`);
       }
+
+      // ** เช็ค semicolon **
+      if (buffer.includes(';')) {
+        throw new Error(
+          `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL. Found in line: "${buffer}"`
+        );
+      }
+
       result.push(buffer);
       buffer = '';
       parenCount = 0;
@@ -239,6 +243,14 @@ function mergeLineForQueryBlock(lines: string[]): string[] {
     if (parenCount !== 0) {
       throw new Error(`[CSS-CTRL-ERR] Missing closing ")" in query block.`);
     }
+
+    // ** เช็ค semicolon อีกครั้งใน buffer ตอนท้ายไฟล์ **
+    if (buffer.includes(';')) {
+      throw new Error(
+        `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL. Found in line: "${buffer}"`
+      );
+    }
+
     result.push(buffer);
   }
 

@@ -1,6 +1,12 @@
 // src/generateCssCommand/parsers/parseDirectives.ts
 
-import { IParseDirectivesResult, IParsedDirective, IClassBlock, IConstBlock, IKeyframeBlock } from '../types';
+import {
+  IParseDirectivesResult,
+  IParsedDirective,
+  IClassBlock,
+  IConstBlock,
+  IKeyframeBlock,
+} from '../types';
 import { createEmptyStyleDef } from '../helpers/createEmptyStyleDef';
 import { parseClassBlocksWithBraceCounting } from '../helpers/parseClassBlocksWithBraceCounting';
 import { parseSingleAbbr } from './parseSingleAbbr';
@@ -72,6 +78,13 @@ export function parseDirectives(text: string): IParseDirectivesResult {
   while ((dMatch = directiveRegex.exec(newText)) !== null) {
     const dirName = dMatch[1];
     const dirValue = dMatch[2].trim();
+
+    // เพิ่มการเช็ค semicolon ที่ top-level directive
+    if (dirName.includes(';') || dirValue.includes(';')) {
+      throw new Error(
+        `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL directive. Found in "@${dirName} ${dirValue}"`
+      );
+    }
 
     // ข้าม @use และ @query
     // (CHANGED) เพิ่ม || dirName === 'bind' เพื่อละเว้น @bind top-level
@@ -154,6 +167,14 @@ function mergeLineForConst(lines: string[]): string[] {
       if (parenCount < 0) {
         throw new Error(`[CSS-CTRL-ERR] Extra ")" found. Line: "${trimmed}"`);
       }
+
+      // ** เพิ่มการเช็ค semicolon ตรงนี้ **
+      if (buffer.includes(';')) {
+        throw new Error(
+          `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL. Found in line: "${buffer}"`
+        );
+      }
+
       result.push(buffer);
       buffer = '';
       parenCount = 0;
@@ -165,6 +186,14 @@ function mergeLineForConst(lines: string[]): string[] {
     if (parenCount !== 0) {
       throw new Error('[CSS-CTRL-ERR] Missing closing ")" in @const parentheses.');
     }
+
+    // ** เช็ค semicolon อีกครั้ง กรณี buffer ค้างตอนท้ายไฟล์ **
+    if (buffer.includes(';')) {
+      throw new Error(
+        `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL. Found in line: "${buffer}"`
+      );
+    }
+
     result.push(buffer);
   }
 

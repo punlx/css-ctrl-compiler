@@ -14,8 +14,6 @@ import { buildKeyframeNameMap, buildKeyframesCSS } from './parsers/paseKeyFrameB
 import { parseThemeClassFull } from '../parseTheme';
 import { formatCss } from '../formatters/formatCss';
 
-// (REMOVED) import { handleBindDirectives } from './utils/handleBindDirectives';
-
 /**
  * globalDefineMap – ถ้าต้องการฟีเจอร์ @const / theme.define ข้ามไฟล์
  * อาจประกาศไว้ตรงนี้ หรือ import มาจากที่อื่น
@@ -157,7 +155,10 @@ async function getThemeClassSet(): Promise<Set<string>> {
   return new Set(Object.keys(classMap));
 }
 
-// (CHANGED) ไม่ต้องเป็น async เพราะไม่ได้หาธีมเอง
+/**
+ * (CHANGED) checkBindLines: เดิมเคย throw error ถ้า class ไม่อยู่ใน .ctrl.ts หรือ theme.class(...)
+ * ตอนนี้แก้ไขให้ **ไม่สนใจ** แล้ว อยาก bind อะไรก็ได้ ไม่เช็คว่าอยู่ที่ไหน
+ */
 function checkBindLines(
   scopeName: string,
   classMap: Map<string, IStyleDefinition>,
@@ -176,25 +177,14 @@ function checkBindLines(
       }
       const refs = raw.split(/\s+/);
       for (const ref of refs) {
+        // ยังเช็คว่าเริ่มด้วย '.' (e.g. ".box1")
         if (!ref.startsWith('.')) {
-          throw new Error(`[CSS-CTRL-ERR] @bind usage must reference classes with a dot. got "${ref}"`);
-        }
-        const shortCls = ref.slice(1);
-        let finalKey = scopeName === 'none' ? shortCls : `${scopeName}_${shortCls}`;
-
-        const isLocal = classMap.has(finalKey);
-        const isTheme = themeClassSet.has(shortCls);
-
-        if (isLocal && isTheme) {
           throw new Error(
-            `[CSS-CTRL-ERR] Conflict: class ".${shortCls}" is declared in both .ctrl.ts and theme.class(...)`
+            `[CSS-CTRL-ERR] @bind usage must reference classes with a dot. got "${ref}"`
           );
         }
-        if (!isLocal && !isTheme) {
-          throw new Error(
-            `[CSS-CTRL-ERR] No class named ".${shortCls}" found in either .ctrl.ts or theme.class(...)`
-          );
-        }
+        // ---- (เปลี่ยน) ยกเลิกการเช็คว่าอยู่ใน .ctrl.ts หรือ theme.class
+        // ---- ดังนั้น ไม่ throw error แม้จะไม่พบ
       }
     }
   }

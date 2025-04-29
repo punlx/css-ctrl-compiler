@@ -225,6 +225,14 @@ function mergeLineForClass(lines: string[]): string[] {
       if (parenCount < 0) {
         throw new Error(`[CSS-CTRL-ERR] Extra ")" found in class block. Line: "${trimmed}"`);
       }
+
+      // ** เช็ค semicolon **
+      if (buffer.includes(';')) {
+        throw new Error(
+          `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL. Found in line: "${buffer}"`
+        );
+      }
+
       result.push(buffer);
       buffer = '';
       parenCount = 0;
@@ -236,6 +244,14 @@ function mergeLineForClass(lines: string[]): string[] {
     if (parenCount !== 0) {
       throw new Error('[CSS-CTRL-ERR] Missing closing ")" in class block.');
     }
+
+    // ** เช็ค semicolon อีกครั้งใน buffer ตอนท้ายไฟล์ **
+    if (buffer.includes(';')) {
+      throw new Error(
+        `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL. Found in line: "${buffer}"`
+      );
+    }
+
     result.push(buffer);
   }
 
