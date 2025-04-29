@@ -21,7 +21,10 @@ export function createBindClassProvider() {
       { language: 'typescriptreact', scheme: 'file' },
     ],
     {
-      provideCompletionItems(document, position) {
+      /**
+       * การปรับเป็น async เพราะเราจะต้อง await การค้นหาไฟล์ ctrl.theme.ts
+       */
+      async provideCompletionItems(document, position) {
         // 1) เฉพาะไฟล์ .ctrl.ts
         if (!document.fileName.endsWith('.ctrl.ts')) {
           return;
@@ -30,8 +33,8 @@ export function createBindClassProvider() {
         // 2) หา class ทั้งหมดในไฟล์ .ctrl.ts
         const ctrlClasses = getAllClasses(document);
 
-        // 2.1) หา class จาก theme.class({...})
-        const themeClasses = getAllThemeClassKeys();
+        // 2.1) หา class จาก theme.class({...}) (แบบ async)
+        const themeClasses = await getAllThemeClassKeys();
         // แปลงเป็น Set ไว้เช็คว่าเป็นของ theme หรือไม่
         const themeClassSet = new Set(themeClasses);
 
@@ -141,17 +144,17 @@ function getUsedClassesInLine(lineText: string): Set<string> {
 
 /**
  * getAllThemeClassKeys:
- * - พยายามหาไฟล์ ctrl.theme.ts (ถ้าพบ)
- * - เรียก parseThemeClassFull => ได้ object { box1:"...", box2:"..." }
+ * - พยายามหาไฟล์ ctrl.theme.ts ใน workspace
+ * - ถ้าเจอ => parseThemeClassFull => ได้ object { box1:"...", box2:"..." }
  * - คืนเป็น array ของ key
  * - ถ้าไม่มีไฟล์ หรือไม่มี theme.class => คืน []
  */
-function getAllThemeClassKeys(): string[] {
+async function getAllThemeClassKeys(): Promise<string[]> {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) return [];
 
-  const rootPath = folders[0].uri.fsPath;
-  const themeFilePath = findCtrlThemeFile(rootPath);
+  // หาไฟล์ ctrl.theme.ts แบบ recursive ทั่ว workspace
+  const themeFilePath = await findCtrlThemeFileInWorkspace();
   if (!themeFilePath) {
     return [];
   }
@@ -160,15 +163,10 @@ function getAllThemeClassKeys(): string[] {
   return Object.keys(classMap);
 }
 
-/**
- * findCtrlThemeFile:
- * - หาไฟล์ "ctrl.theme.ts" ใต้ rootPath (ง่าย ๆ)
- * - ถ้าเจอ => return path; ไม่เจอ => return undefined
- */
-function findCtrlThemeFile(rootPath: string): string | undefined {
-  const candidate = path.join(rootPath, 'ctrl.theme.ts');
-  if (fs.existsSync(candidate)) {
-    return candidate;
+async function findCtrlThemeFileInWorkspace(): Promise<string | undefined> {
+  const files = await vscode.workspace.findFiles('**/ctrl.theme.ts', '**/node_modules/**', 1);
+  if (files.length > 0) {
+    return files[0].fsPath;
   }
   return undefined;
 }
