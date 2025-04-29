@@ -16,15 +16,11 @@ import { parseSingleAbbr } from './parseSingleAbbr';
  *  - สแกนไฟล์หาคำสั่ง @const, @keyframe, @scope, @bind
  *  - ดึง .className { ... } ที่ระดับ top-level
  *  - ส่งผลลัพธ์เป็น IParseDirectivesResult
- *
- * (CHANGED) ปรับ mergeMultiLineParen เพื่อยอมให้มีฟังก์ชัน CSS ใน property value
  */
 export function parseDirectives(text: string): IParseDirectivesResult {
   const directives: IParsedDirective[] = [];
   const classBlocks: IClassBlock[] = [];
   const constBlocks: IConstBlock[] = [];
-
-  // --- ADDED FOR KEYFRAME ---
   const keyframeBlocks: IKeyframeBlock[] = [];
 
   let newText = text;
@@ -39,7 +35,7 @@ export function parseDirectives(text: string): IParseDirectivesResult {
 
     const partialDef = createEmptyStyleDef();
 
-    // (CHANGED) ใช้ฟังก์ชันใหม่ mergeLineForConst ที่ผ่อนปรนวงเล็บ CSS
+    // ใช้ฟังก์ชันใหม่ mergeLineForConst
     const splittedLines = rawBlock
       .split('\n')
       .map((l) => l.trim())
@@ -76,20 +72,20 @@ export function parseDirectives(text: string): IParseDirectivesResult {
   let dMatch: RegExpExecArray | null;
   directiveRegex.lastIndex = 0;
   while ((dMatch = directiveRegex.exec(newText)) !== null) {
-    const dirName = dMatch[1];
-    const dirValue = dMatch[2].trim();
+    let dirName = dMatch[1];
+    let dirValue = dMatch[2].trim();
 
-    // เพิ่มการเช็ค semicolon ที่ top-level directive
-    if (dirName.includes(';') || dirValue.includes(';')) {
-      throw new Error(
-        `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL directive. Found in "@${dirName} ${dirValue}"`
-      );
+    // เดิมเช็ค ; => throw Error. ตอนนี้แก้เป็น remove ;
+    if (dirName.includes(';')) {
+      dirName = dirName.replace(/;/g, '');
+    }
+    if (dirValue.includes(';')) {
+      dirValue = dirValue.replace(/;/g, '');
     }
 
-    // ข้าม @use และ @query
-    // (CHANGED) เพิ่ม || dirName === 'bind' เพื่อละเว้น @bind top-level
+    // ข้าม @use และ @query, @bind
     if (dirName === 'use' || dirName === 'query' || dirName === 'bind') {
-      continue; // (CHANGED) ไม่ให้ดึงเป็น directive อีกต่อไป
+      continue;
     }
     directives.push({ name: dirName, value: dirValue });
     newText = newText.replace(dMatch[0], '').trim();
@@ -112,15 +108,13 @@ export function parseDirectives(text: string): IParseDirectivesResult {
 
 /**
  * (CHANGED) mergeLineForConst
- * ฟังก์ชันใหม่ (คล้าย mergeMultiLineParen เดิม) แต่ผ่อนปรน:
- *  - ยอมให้มีฟังก์ชัน CSS (rgba(..), calc(..)) ซ้อนใน property value
- *  - หากเจอ DSL function ซ้อน DSL function ค่อยเตือน (หรือตาม logic เดิม)
+ * เดิมเรา throw error ถ้าพบ ; -> ตอนนี้เปลี่ยนเป็นลบออก
  */
 function mergeLineForConst(lines: string[]): string[] {
   const result: string[] = [];
   let buffer = '';
   let parenCount = 0;
-  let inCssFunc = false; // state สำหรับจับว่าอยู่ในฟังก์ชัน CSS หรือไม่
+  let inCssFunc = false;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -131,7 +125,6 @@ function mergeLineForConst(lines: string[]): string[] {
       if (ch === '(') {
         // ตรวจดู context ละแวกนี้
         const ahead = trimmed.slice(i - 5, i + 1).toLowerCase();
-        // ถ้าเจอเช่น "rgba(", "calc(", "hsl(", "url(", ...
         if (
           /\b(rgba|rgb|calc|hsl|hsla|url|clamp|var|min|max|attr|counter|counters|env|repeat|linear-gradient|radial-gradient|conic-gradient|image-set|matrix|translate|translatex|translatey|translatez|translate3d|scale|scalex|scaley|scalez|scale3d|rotate|rotatex|rotatey|rotatez|rotate3d|skew|skewx|skewy|perspective)\($/.test(
             ahead
@@ -139,7 +132,6 @@ function mergeLineForConst(lines: string[]): string[] {
         ) {
           inCssFunc = true;
         } else {
-          // DSL parentheses
           if (parenCount > 0 && !inCssFunc) {
             throw new Error(
               `[CSS-CTRL-ERR] Nested DSL parentheses not allowed. Found: "${trimmed}"`
@@ -162,17 +154,15 @@ function mergeLineForConst(lines: string[]): string[] {
       buffer += ' ' + trimmed;
     }
 
-    // ถ้าจบ parenCount <= 0 => push
     if (parenCount <= 0) {
       if (parenCount < 0) {
         throw new Error(`[CSS-CTRL-ERR] Extra ")" found. Line: "${trimmed}"`);
       }
 
-      // ** เพิ่มการเช็ค semicolon ตรงนี้ **
+      // เดิม throw error ถ้าเจอ ';'
+      // ตอนนี้เปลี่ยนเป็นลบออก
       if (buffer.includes(';')) {
-        throw new Error(
-          `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL. Found in line: "${buffer}"`
-        );
+        buffer = buffer.replace(/;/g, '');
       }
 
       result.push(buffer);
@@ -186,14 +176,9 @@ function mergeLineForConst(lines: string[]): string[] {
     if (parenCount !== 0) {
       throw new Error('[CSS-CTRL-ERR] Missing closing ")" in @const parentheses.');
     }
-
-    // ** เช็ค semicolon อีกครั้ง กรณี buffer ค้างตอนท้ายไฟล์ **
     if (buffer.includes(';')) {
-      throw new Error(
-        `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL. Found in line: "${buffer}"`
-      );
+      buffer = buffer.replace(/;/g, '');
     }
-
     result.push(buffer);
   }
 

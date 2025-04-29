@@ -10,7 +10,6 @@ function transformAngleBracketsToQuery(body: string): string {
 
   while (i < body.length) {
     const c = body[i];
-
     if (c === '{') {
       braceCount++;
     } else if (c === '}') {
@@ -18,7 +17,6 @@ function transformAngleBracketsToQuery(body: string): string {
       if (braceCount < 0) braceCount = 0;
     }
 
-    // top-level
     if (braceCount === 0 && c === '>') {
       let countGT = 1;
       let j = i + 1;
@@ -73,18 +71,10 @@ function maybeTransformPluginQuerySelector(rawSelector: string): string {
   return trimmed;
 }
 
-/**
- * parseNestedQueryBlocks
- *  - สแกนหา @query <selector> { ... } หรือ transformAngleBracketsToQuery
- *  - เก็บส่วนอื่น ๆ ไว้ใน lines[], เก็บ @query ไว้ใน queries[]
- *
- * (CHANGED) ตรง mergeMultiLineParen -> mergeLineForQueryBlock
- */
 export function parseNestedQueryBlocks(body: string): {
   lines: string[];
   queries: INestedQueryNode[];
 } {
-  // transform '>' => '@query' (เหมือนเดิม)
   body = transformAngleBracketsToQuery(body);
 
   const lines: string[] = [];
@@ -100,15 +90,12 @@ export function parseNestedQueryBlocks(body: string): {
           .split('\n')
           .map((l) => l.trim())
           .filter(Boolean);
-
-        // (CHANGED) mergeLineForQueryBlock แทน
         leftoverLines = mergeLineForQueryBlock(leftoverLines);
         lines.push(...leftoverLines);
       }
       break;
     }
 
-    // chunkBefore
     const chunkBefore = body.slice(i, queryIdx).trim();
     if (chunkBefore) {
       let chunkLines = chunkBefore
@@ -119,7 +106,6 @@ export function parseNestedQueryBlocks(body: string): {
       lines.push(...chunkLines);
     }
 
-    // parse "@query <selector> { ... }"
     let startSelectorIdx = queryIdx + '@query'.length;
     while (startSelectorIdx < body.length && /\s/.test(body[startSelectorIdx])) {
       startSelectorIdx++;
@@ -135,7 +121,6 @@ export function parseNestedQueryBlocks(body: string): {
       throw new Error('[CSS-CTRL-ERR] parseNestedQueryBlocks: missing selector after @query.');
     }
 
-    // replace @scope.xxx => SCOPE_REF(xxx)
     rawSelector = rawSelector.replace(/@scope\.([\w-]+)/g, (_m, className) => {
       if (!className) {
         throw new Error('[CSS-CTRL-ERR] parseNestedQueryBlocks: missing className after @scope.');
@@ -143,7 +128,6 @@ export function parseNestedQueryBlocks(body: string): {
       return `SCOPE_REF(${className})`;
     });
 
-    // plugin state short transform
     rawSelector = maybeTransformPluginQuerySelector(rawSelector);
 
     let nested = 1;
@@ -161,13 +145,12 @@ export function parseNestedQueryBlocks(body: string): {
 
     const innerBody = body.slice(braceOpenIdx + 1, j).trim();
 
-    // recursive parse child
     const childResult = parseNestedQueryBlocks(innerBody);
 
     queries.push({
       selector: rawSelector,
       rawLines: childResult.lines,
-      styleDef: undefined as any, // fill later
+      styleDef: undefined as any,
       children: childResult.queries,
     });
 
@@ -179,7 +162,7 @@ export function parseNestedQueryBlocks(body: string): {
 
 /**
  * (CHANGED) mergeLineForQueryBlock
- * เวอร์ชันที่ยอมให้มีวงเล็บ CSS function ใน property value
+ * เดิม throw error ถ้าเจอ ';', ตอนนี้ลบออกแทน
  */
 function mergeLineForQueryBlock(lines: string[]): string[] {
   const result: string[] = [];
@@ -225,11 +208,9 @@ function mergeLineForQueryBlock(lines: string[]): string[] {
         throw new Error(`[CSS-CTRL-ERR] Extra ")" found. in query block. Line: "${trimmed}"`);
       }
 
-      // ** เช็ค semicolon **
+      // ลบ ';'
       if (buffer.includes(';')) {
-        throw new Error(
-          `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL. Found in line: "${buffer}"`
-        );
+        buffer = buffer.replace(/;/g, '');
       }
 
       result.push(buffer);
@@ -244,13 +225,9 @@ function mergeLineForQueryBlock(lines: string[]): string[] {
       throw new Error(`[CSS-CTRL-ERR] Missing closing ")" in query block.`);
     }
 
-    // ** เช็ค semicolon อีกครั้งใน buffer ตอนท้ายไฟล์ **
     if (buffer.includes(';')) {
-      throw new Error(
-        `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL. Found in line: "${buffer}"`
-      );
+      buffer = buffer.replace(/;/g, '');
     }
-
     result.push(buffer);
   }
 

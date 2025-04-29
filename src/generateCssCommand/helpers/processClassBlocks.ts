@@ -27,7 +27,6 @@ function parseNestedQueryDef(
   for (const node of queries) {
     const subDef = createEmptyStyleDef();
 
-    // (CHANGED) ใช้ mergeLineForClass แทน
     const mergedLines = mergeLineForClass(node.rawLines);
 
     const usedConstNames: string[] = [];
@@ -80,9 +79,6 @@ function parseNestedQueryDef(
 /**
  * processClassBlocks
  *  - parse .className { ... } => สร้าง styleDef => ใส่ลง map
- *  - return Map<finalKey, styleDef> และ shortNameToFinal
- *
- * (CHANGED) จุดสำคัญคือเปลี่ยนฟังก์ชัน mergeMultiLineParen เป็น mergeLineForClass
  */
 export function processClassBlocks(
   scopeName: string,
@@ -109,30 +105,22 @@ export function processClassBlocks(
 
     const classStyleDef = createEmptyStyleDef();
 
-    // ดึง query blocks ภายใน body => parseNestedQueryBlocks
     const { lines, queries } = parseNestedQueryBlocks(block.body);
 
-    // (CHANGED) mergeMultiLineParen => mergeLineForClass
     const mergedLines = mergeLineForClass(lines);
 
     let usedConstNames: string[] = [];
     const normalLines: string[] = [];
 
-    // (CHANGED) เพิ่มเช็ค @bind ภายใน .class
     for (const ln of mergedLines) {
       if (ln.startsWith('@use ')) {
         usedConstNames.push(...ln.replace('@use', '').trim().split(/\s+/));
-      }
-      // (CHANGED) ตรวจจับ @bind
-      else if (ln.startsWith('@bind ')) {
-        // สร้าง array ไว้เก็บบรรทัด bind ถ้าไม่มี
+      } else if (ln.startsWith('@bind ')) {
         if (!(classStyleDef as any)._bindLines) {
           (classStyleDef as any)._bindLines = [];
         }
-        // push บรรทัด bind นี้เก็บไว้ (ยังไม่ parse หรือ gen CSS)
         (classStyleDef as any)._bindLines.push(ln);
-      }
-      else {
+      } else {
         normalLines.push(ln);
       }
     }
@@ -149,7 +137,6 @@ export function processClassBlocks(
       parseSingleAbbr(ln, classStyleDef, false, false, false, keyframeNameMap);
     }
 
-    // parse nested queries
     classStyleDef.nestedQueries = parseNestedQueryDef(queries, classStyleDef, constMap, keyframeNameMap);
 
     if ((classStyleDef as any)._usedLocalVars) {
@@ -176,7 +163,7 @@ export function processClassBlocks(
 
 /**
  * (CHANGED) mergeLineForClass
- * คล้าย mergeMultiLineParen เดิม แต่ยอมให้มีฟังก์ชัน CSS ใน property value
+ * เดิม throw error ถ้าเจอ ';', เปลี่ยนเป็นลบ ';'
  */
 function mergeLineForClass(lines: string[]): string[] {
   const result: string[] = [];
@@ -189,9 +176,7 @@ function mergeLineForClass(lines: string[]): string[] {
 
     for (let i = 0; i < trimmed.length; i++) {
       const ch = trimmed[i];
-
       if (ch === '(') {
-        // สแกนว่าคือ CSS function รึเปล่า
         const ahead = trimmed.slice(Math.max(0, i - 5), i + 1).toLowerCase();
         if (
           /\b(rgba|rgb|calc|hsl|hsla|url|clamp|var|min|max|attr|counter|counters|env|repeat|linear-gradient|radial-gradient|conic-gradient|image-set|matrix|translate|translatex|translatey|translatez|translate3d|scale|scalex|scaley|scalez|scale3d|rotate|rotatex|rotatey|rotatez|rotate3d|skew|skewx|skewy|perspective)\($/.test(
@@ -200,9 +185,10 @@ function mergeLineForClass(lines: string[]): string[] {
         ) {
           inCssFunc = true;
         } else {
-          // DSL parentheses
           if (parenCount > 0 && !inCssFunc) {
-            throw new Error(`[CSS-CTRL-ERR] Nested DSL parentheses not allowed. Found: "${trimmed}"`);
+            throw new Error(
+              `[CSS-CTRL-ERR] Nested DSL parentheses not allowed. Found: "${trimmed}"`
+            );
           }
           parenCount++;
         }
@@ -226,11 +212,9 @@ function mergeLineForClass(lines: string[]): string[] {
         throw new Error(`[CSS-CTRL-ERR] Extra ")" found in class block. Line: "${trimmed}"`);
       }
 
-      // ** เช็ค semicolon **
+      // ลบ ';' แทน throw error
       if (buffer.includes(';')) {
-        throw new Error(
-          `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL. Found in line: "${buffer}"`
-        );
+        buffer = buffer.replace(/;/g, '');
       }
 
       result.push(buffer);
@@ -244,14 +228,9 @@ function mergeLineForClass(lines: string[]): string[] {
     if (parenCount !== 0) {
       throw new Error('[CSS-CTRL-ERR] Missing closing ")" in class block.');
     }
-
-    // ** เช็ค semicolon อีกครั้งใน buffer ตอนท้ายไฟล์ **
     if (buffer.includes(';')) {
-      throw new Error(
-        `[CSS-CTRL-ERR] Semicolon ";" is not allowed in CSS-CTRL DSL. Found in line: "${buffer}"`
-      );
+      buffer = buffer.replace(/;/g, '');
     }
-
     result.push(buffer);
   }
 
