@@ -1,21 +1,23 @@
 // src/generateCssCommand/parsers/parseDirectives.ts
+
+import {
+  IParseDirectivesResult,
+  IParsedDirective,
+  IClassBlock,
+  IConstBlock,
+  IKeyframeBlock,
+} from '../types';
 import { createEmptyStyleDef } from '../helpers/createEmptyStyleDef';
 import { parseClassBlocksWithBraceCounting } from '../helpers/parseClassBlocksWithBraceCounting';
 import { parseSingleAbbr } from './parseSingleAbbr';
 
-import {
-  IClassBlock,
-  IConstBlock,
-  IParsedDirective,
-  IParseDirectivesResult,
-  IKeyframeBlock,
-} from '../types';
-
 /**
  * parseDirectives:
- *  - สแกนไฟล์หาคำสั่ง @const, @keyframe, @scope, @bind ฯลฯ
+ *  - สแกนไฟล์หาคำสั่ง @const, @keyframe, @scope, @bind
  *  - ดึง .className { ... } ที่ระดับ top-level
  *  - ส่งผลลัพธ์เป็น IParseDirectivesResult
+ *
+ * (CHANGED) ปรับ mergeMultiLineParen เพื่อยอมให้มีฟังก์ชัน CSS ใน property value
  */
 export function parseDirectives(text: string): IParseDirectivesResult {
   const directives: IParsedDirective[] = [];
@@ -27,9 +29,7 @@ export function parseDirectives(text: string): IParseDirectivesResult {
 
   let newText = text;
 
-  // -----------------------------------------
   // (1) parse @const <name> { ... }
-  // -----------------------------------------
   const constRegex = /^[ \t]*@const\s+([\w-]+)\s*\{([\s\S]*?)\}/gm;
   const allConstMatches = [...newText.matchAll(constRegex)];
   for (const m of allConstMatches) {
@@ -37,32 +37,24 @@ export function parseDirectives(text: string): IParseDirectivesResult {
     const constName = m[1];
     const rawBlock = m[2]; // เนื้อใน {...}
 
-    // สร้าง styleDef ว่าง
     const partialDef = createEmptyStyleDef();
 
-    // split เป็นบรรทัด
+    // (CHANGED) ใช้ฟังก์ชันใหม่ mergeLineForConst ที่ผ่อนปรนวงเล็บ CSS
     const splittedLines = rawBlock
       .split('\n')
       .map((l) => l.trim())
       .filter(Boolean);
-    // (NEW) mergeMultiLineParen เพื่อรองรับ hover( ... ) / screen(...) หลายบรรทัด
-    const mergedLines = mergeMultiLineParen(splittedLines);
+    const mergedLines = mergeLineForConst(splittedLines);
 
     for (const ln of mergedLines) {
-      // ห้ามมี @query ใน @const => parseSingleAbbr(.. isConstContext=true, isQueryBlock=false)
       parseSingleAbbr(ln, partialDef, /*isConstContext=*/ true, /*isQueryBlock=*/ false);
     }
 
-    // เก็บเป็น IConstBlock
     constBlocks.push({ name: constName, styleDef: partialDef });
-
-    // ตัด substring ที่ match ออก (กันไม่ให้ parse ซ้ำ)
     newText = newText.replace(fullMatch, '').trim();
   }
 
-  // -----------------------------------------
   // (2) parse @keyframe <name> { ... }
-  // -----------------------------------------
   const keyframeRegex = /^[ \t]*@keyframe\s+([\w-]+)\s*\{([\s\S]*?)\}/gm;
   let keyMatch: RegExpExecArray | null;
   while ((keyMatch = keyframeRegex.exec(newText)) !== null) {
@@ -75,14 +67,11 @@ export function parseDirectives(text: string): IParseDirectivesResult {
       rawBlock,
     });
 
-    // ตัดทิ้ง
     newText = newText.replace(fullMatch, '').trim();
     keyframeRegex.lastIndex = 0; // reset
   }
 
-  // -----------------------------------------
   // (3) parse directive top-level (@scope, @bind, etc.)
-  // -----------------------------------------
   const directiveRegex = /^[ \t]*@([\w-]+)\s+([^\r\n]+)/gm;
   let dMatch: RegExpExecArray | null;
   directiveRegex.lastIndex = 0;
@@ -90,31 +79,16 @@ export function parseDirectives(text: string): IParseDirectivesResult {
     const dirName = dMatch[1];
     const dirValue = dMatch[2].trim();
 
-    // ข้าม @use และ @query (ถ้ามี) ไปก่อน
+    // ข้าม @use และ @query
     if (dirName === 'use' || dirName === 'query') {
       continue;
     }
-
-    // ตรวจ @scope <name> (เฉพาะ a-z0-9_-)
-    if (dirName === 'scope') {
-      if (dirValue !== 'none') {
-        const scopeNameRegex = /^[a-zA-Z0-9_-]+$/;
-        if (!scopeNameRegex.test(dirValue)) {
-          throw new Error(
-            `[CSS-CTRL-ERR] scope name must contain only letters, digits, underscore, or dash. Got: "${dirValue}"`
-          );
-        }
-      }
-    }
-
     directives.push({ name: dirName, value: dirValue });
     newText = newText.replace(dMatch[0], '').trim();
     directiveRegex.lastIndex = 0;
   }
 
-  // -----------------------------------------
   // (4) parse .className { ... } ที่เหลือ (ระดับ top-level)
-  // -----------------------------------------
   const blocks = parseClassBlocksWithBraceCounting(newText);
   for (const blk of blocks) {
     classBlocks.push(blk);
@@ -129,40 +103,50 @@ export function parseDirectives(text: string): IParseDirectivesResult {
 }
 
 /**
- * mergeMultiLineParen
- * ฟังก์ชันสำหรับรวมหลายบรรทัดที่ยังอยู่ใน (...) ให้เป็น 1 บรรทัด
- * - พร้อมตรวจว่า (1) ห้ามมีวงเล็บซ้อน
- * - (2) ห้ามมี '{' / '>' / '@query' ภายใน (...), ตามแบบเดียวกับ .className
+ * (CHANGED) mergeLineForConst
+ * ฟังก์ชันใหม่ (คล้าย mergeMultiLineParen เดิม) แต่ผ่อนปรน:
+ *  - ยอมให้มีฟังก์ชัน CSS (rgba(..), calc(..)) ซ้อนใน property value
+ *  - หากเจอ DSL function ซ้อน DSL function ค่อยเตือน (หรือตาม logic เดิม)
  */
-function mergeMultiLineParen(rawLines: string[]): string[] {
+function mergeLineForConst(lines: string[]): string[] {
   const result: string[] = [];
   let buffer = '';
   let parenCount = 0;
+  let inCssFunc = false; // state สำหรับจับว่าอยู่ในฟังก์ชัน CSS หรือไม่
 
-  for (const line of rawLines) {
+  for (const line of lines) {
     const trimmed = line.trim();
 
-    // สแกนทีละตัวอักษร
     for (let i = 0; i < trimmed.length; i++) {
       const ch = trimmed[i];
-      if (ch === '(') {
-        if (parenCount > 0) {
-          throw new Error(
-            `[CSS-CTRL-ERR] Nested parentheses not allowed in @const. Found: "${trimmed}"`
-          );
-        }
-        parenCount++;
-      } else if (ch === ')') {
-        parenCount--;
-      }
-    }
 
-    // ถ้า parenCount > 0 => ห้ามมี '{', '>', '@query'
-    if (parenCount > 0) {
-      if (trimmed.includes('>') || trimmed.includes('@query')) {
-        throw new Error(
-          `[CSS-CTRL-ERR] '>' or '@query' not allowed in (...). Found: "${trimmed}" (in @const)`
-        );
+      if (ch === '(') {
+        // ตรวจดู context ละแวกนี้
+        const ahead = trimmed.slice(i - 5, i + 1).toLowerCase();
+        // ถ้าเจอเช่น "rgba(", "calc(", "hsl(", "url(", ...
+        if (
+          /\b(rgba|rgb|calc|hsl|hsla|url|clamp|var|min|max|attr|counter|counters|env|repeat|linear-gradient|radial-gradient|conic-gradient|image-set|matrix|translate|translateX|translateY|translateZ|translate3d|scale|scaleX|scaleY|scaleZ|scale3d|rotate|rotateX|rotateY|rotateZ|rotate3d|skew|skewX|skewY|perspective)\($/.test(
+            ahead
+          )
+        ) {
+          inCssFunc = true;
+        } else {
+          // DSL parentheses
+          if (parenCount > 0 && !inCssFunc) {
+            // ยังมี DSL paren ค้าง => nested DSL => ถ้าอยาก error ก็โยน
+            throw new Error(
+              `[CSS-CTRL-ERR] Nested DSL parentheses not allowed. Found: "${trimmed}"`
+            );
+          }
+          parenCount++;
+        }
+      } else if (ch === ')') {
+        if (inCssFunc) {
+          // ปิดฟังก์ชัน CSS
+          inCssFunc = false;
+        } else {
+          parenCount--;
+        }
       }
     }
 
@@ -172,21 +156,21 @@ function mergeMultiLineParen(rawLines: string[]): string[] {
       buffer += ' ' + trimmed;
     }
 
-    if (parenCount <= 0 && buffer) {
+    // ถ้าจบ parenCount <= 0 => push
+    if (parenCount <= 0) {
       if (parenCount < 0) {
-        throw new Error(`[CSS-CTRL-ERR] Extra ")" found in @const. Line: "${trimmed}"`);
+        throw new Error(`[CSS-CTRL-ERR] Extra ")" found. Line: "${trimmed}"`);
       }
       result.push(buffer);
       buffer = '';
       parenCount = 0;
+      inCssFunc = false;
     }
   }
 
   if (buffer) {
     if (parenCount !== 0) {
-      throw new Error(
-        '[CSS-CTRL-ERR] Missing closing ")" in @const parentheses. Or there is a use of ">query" or "pseudo-function" inside which can cause an error.'
-      );
+      throw new Error(`[CSS-CTRL-ERR] Missing closing ")" in @const parentheses.`);
     }
     result.push(buffer);
   }

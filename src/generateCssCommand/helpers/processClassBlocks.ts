@@ -12,16 +12,14 @@ import { transformLocalVariables } from '../transformers/transformLocalVariables
 import { makeFinalName } from '../utils/sharedScopeUtils';
 
 /**
- * parseNestedQueryDef - ...
- * ...
+ * (CHANGED) parseNestedQueryDef:
+ *  - handle children queries recursively
  */
 // @ts-ignore
 function parseNestedQueryDef(
   queries: any[],
   parentDef: IStyleDefinition,
   constMap: Map<string, IStyleDefinition>,
-
-  // --- ADDED for Keyframe rename ---
   keyframeNameMap?: Map<string, string>
 ) {
   const out = [];
@@ -29,8 +27,8 @@ function parseNestedQueryDef(
   for (const node of queries) {
     const subDef = createEmptyStyleDef();
 
-    // เรียก mergeMultiLineParen กับ node.rawLines
-    const mergedLines = mergeMultiLineParen(node.rawLines);
+    // (CHANGED) ใช้ mergeLineForClass แทน
+    const mergedLines = mergeLineForClass(node.rawLines);
 
     const usedConstNames: string[] = [];
     const normalLines: string[] = [];
@@ -62,7 +60,6 @@ function parseNestedQueryDef(
     }
 
     for (const qLn of normalLines) {
-      // --- PASS keyframeNameMap => parseSingleAbbr
       parseSingleAbbr(qLn, subDef, false, true, false, keyframeNameMap);
     }
 
@@ -80,16 +77,17 @@ function parseNestedQueryDef(
   return out;
 }
 
+
 /**
  * processClassBlocks - parse .className { ... } => สร้าง styleDef => ใส่ลง map
  * return ทั้ง Map<finalKey, styleDef> และ shortNameToFinal เพื่อรองรับ @scope.xxx
+ *
+ * (CHANGED) จุดสำคัญคือเปลี่ยนฟังก์ชัน mergeMultiLineParen เป็น mergeLineForClass
  */
 export function processClassBlocks(
   scopeName: string,
   classBlocks: IClassBlock[],
   constMap: Map<string, IStyleDefinition>,
-
-  // --- ADDED for Keyframe rename ---
   keyframeNameMap?: Map<string, string>
 ): {
   classMap: Map<string, IStyleDefinition>;
@@ -111,10 +109,11 @@ export function processClassBlocks(
 
     const classStyleDef = createEmptyStyleDef();
 
+    // ดึง query blocks ภายใน body => parseNestedQueryBlocks
     const { lines, queries } = parseNestedQueryBlocks(block.body);
 
-    // เพิ่มขั้นตอน mergeMultiLineParen ให้ lines
-    const mergedLines = mergeMultiLineParen(lines);
+    // (CHANGED) mergeMultiLineParen => mergeLineForClass
+    const mergedLines = mergeLineForClass(lines);
 
     let usedConstNames: string[] = [];
     const normalLines: string[] = [];
@@ -136,17 +135,11 @@ export function processClassBlocks(
     }
 
     for (const ln of normalLines) {
-      // --- PASS keyframeNameMap => parseSingleAbbr => เพื่อ rename keyframe
       parseSingleAbbr(ln, classStyleDef, false, false, false, keyframeNameMap);
     }
 
-    // parse nested queries (if any)
-    classStyleDef.nestedQueries = parseNestedQueryDef(
-      queries,
-      classStyleDef,
-      constMap,
-      keyframeNameMap
-    );
+    // parse nested queries
+    classStyleDef.nestedQueries = parseNestedQueryDef(queries, classStyleDef, constMap, keyframeNameMap);
 
     if ((classStyleDef as any)._usedLocalVars) {
       for (const usedVar of (classStyleDef as any)._usedLocalVars) {
@@ -163,53 +156,48 @@ export function processClassBlocks(
     transformVariables(classStyleDef, finalKey, scopeName);
     transformLocalVariables(classStyleDef, finalKey, scopeName);
 
-    // (NEW) เก็บ shortName -> finalKey
     shortNameToFinal.set(clsName, finalKey);
-
-    // เก็บลง map: finalKey -> styleDef
     classMap.set(finalKey, classStyleDef);
   }
 
   return { classMap, shortNameToFinal };
 }
 
+
 /**
- * mergeMultiLineParen
- * ฟังก์ชันสำหรับรวมหลายบรรทัดที่ยังอยู่ในวงเล็บเปิด '(' แต่ยังไม่เจอ ')' ครบ
- * เพื่อรองรับการเขียนแบบหลายบรรทัดใน hover( ... ), screen( ... ) ฯลฯ
- * และ handle error:
- *   (1) ห้ามมีวงเล็บซ้อน (...) ใน (...)
- *   (2) ห้ามมี '>' หรือ '@query' ภายใน (...)
+ * (CHANGED) mergeLineForClass
+ * คล้าย mergeMultiLineParen เดิม แต่ยอมให้มีฟังก์ชัน CSS ใน property value
  */
-function mergeMultiLineParen(lines: string[]): string[] {
+function mergeLineForClass(lines: string[]): string[] {
   const result: string[] = [];
   let buffer = '';
   let parenCount = 0;
+  let inCssFunc = false;
 
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // สแกนทีละตัวอักษร
     for (let i = 0; i < trimmed.length; i++) {
       const ch = trimmed[i];
 
       if (ch === '(') {
-        // ถ้า parenCount > 0 => แสดงว่ากำลังอยู่ใน (...) แล้วเจอ '(' อีก => ซ้อน
-        if (parenCount > 0) {
-          throw new Error(`[CSS-CTRL-ERR] Nested parentheses not allowed. Found: "${trimmed}"`);
+        // สแกนว่าคือ CSS function รึเปล่า
+        const ahead = trimmed.slice(Math.max(0, i - 5), i + 1).toLowerCase();
+        if (/\b(rgba|rgb|calc|hsl|hsla|url|clamp|var|min|max|attr|counter|counters|env|repeat|linear-gradient|radial-gradient|conic-gradient|image-set|matrix|translate|translateX|translateY|translateZ|translate3d|scale|scaleX|scaleY|scaleZ|scale3d|rotate|rotateX|rotateY|rotateZ|rotate3d|skew|skewX|skewY|perspective)\($/.test(ahead)) {
+          inCssFunc = true;
+        } else {
+          // DSL parentheses
+          if (parenCount > 0 && !inCssFunc) {
+            throw new Error(`[CSS-CTRL-ERR] Nested DSL parentheses not allowed. Found: "${trimmed}"`);
+          }
+          parenCount++;
         }
-        parenCount++;
       } else if (ch === ')') {
-        parenCount--;
-      }
-    }
-
-    // ถ้า parenCount > 0 => เราอยู่ในวงเล็บ => ห้ามมี '>' หรือ '@query'
-    if (parenCount > 0) {
-      if (trimmed.includes('>') || trimmed.includes('@query')) {
-        throw new Error(
-          `[CSS-CTRL-ERR] ">" or "@query" not allowed inside (...). Found: "${trimmed}"`
-        );
+        if (inCssFunc) {
+          inCssFunc = false;
+        } else {
+          parenCount--;
+        }
       }
     }
 
@@ -219,23 +207,20 @@ function mergeMultiLineParen(lines: string[]): string[] {
       buffer += ' ' + trimmed;
     }
 
-    // ถ้า parenCount <= 0 => ครบแล้ว => push buffer
-    if (parenCount <= 0 && buffer) {
-      // ถ้า parenCount < 0 => เจอ ) เกิน
+    if (parenCount <= 0) {
       if (parenCount < 0) {
-        throw new Error(`[CSS-CTRL-ERR] Extra ")" found. Line: "${trimmed}"`);
+        throw new Error(`[CSS-CTRL-ERR] Extra ")" found in class block. Line: "${trimmed}"`);
       }
       result.push(buffer);
       buffer = '';
       parenCount = 0;
+      inCssFunc = false;
     }
   }
 
-  // ถ้ายังเหลือ buffer ค้างอยู่
   if (buffer) {
     if (parenCount !== 0) {
-      // ถ้า parenCount != 0 => เปิดไม่ปิด
-      throw new Error('[CSS-CTRL-ERR] Missing closing ")" in parentheses. Or there is a use of ">query" or "pseudo-function" inside which can cause an error.');
+      throw new Error('[CSS-CTRL-ERR] Missing closing ")" in class block.');
     }
     result.push(buffer);
   }
