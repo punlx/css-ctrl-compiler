@@ -7,13 +7,14 @@ import * as path from 'path';
 import { ensureScopeUnique } from './utils/ensureScopeUnique';
 import { parseDirectives } from './parsers/parseDirectives';
 import { processClassBlocks } from './helpers/processClassBlocks';
-import { handleBindDirectives } from './utils/handleBindDirectives';
 import { buildCssText } from './builders/buildCssText';
 import { IStyleDefinition } from './types';
 
 import { buildKeyframeNameMap, buildKeyframesCSS } from './parsers/paseKeyFrameBody';
-import { parseThemeClassFull } from '../parseTheme'; // <--- สำหรับ parse theme.class(...)
+import { parseThemeClassFull } from '../parseTheme';
 import { formatCss } from '../formatters/formatCss';
+
+// (REMOVED) import { handleBindDirectives } from './utils/handleBindDirectives';
 
 /**
  * globalDefineMap – ถ้าต้องการฟีเจอร์ @const / theme.define ข้ามไฟล์
@@ -23,8 +24,9 @@ export const globalDefineMap: Record<string, Record<string, IStyleDefinition>> =
 
 /************************************************************
  * ฟังก์ชันหลัก: generateCssCtrlCssFromSource
+ * (CHANGED) เปลี่ยนเป็น async เพื่อเรียกใช้ getThemeClassSet() แบบ async
  ************************************************************/
-export function generateCssCtrlCssFromSource(sourceText: string): string {
+export async function generateCssCtrlCssFromSource(sourceText: string): Promise<string> {
   // (A) parse directives
   const {
     directives,
@@ -47,12 +49,9 @@ export function generateCssCtrlCssFromSource(sourceText: string): string {
   }
 
   // --- NEW STEP for Keyframe NameMap ---
-  // ก่อน parse .className blocks เราต้องรู้ว่า kf1 => app_kf1
-  // เพื่อเอาไป rename ตอนเจอ abbr "am[kf1 ...]" ใน class blocks
   const keyframeNameMap = buildKeyframeNameMap(keyframeBlocks, scopeName);
 
   // (D) parse .className blocks => Map<classDisplayKey, styleDef> + shortNameToFinal
-  //    (ส่ง keyframeNameMap เข้าไปด้วย)
   const { classMap: classNameDefs, shortNameToFinal } = processClassBlocks(
     scopeName,
     classBlocks,
@@ -60,16 +59,19 @@ export function generateCssCtrlCssFromSource(sourceText: string): string {
     keyframeNameMap
   );
 
-  // (E) handle @bind => ต้องการ 4 arguments
-  // => เราเรียกฟังก์ชัน getThemeClassSet() เพื่อนำรายชื่อ class จาก theme.class(...) มาสร้าง Set
-  const themeClassSet = getThemeClassSet();
-  handleBindDirectives(scopeName, directives, classNameDefs, themeClassSet);
+  // (E) เดิมเราจะ call handleBindDirectives(...) ที่ top-level
+  //     (REMOVED) เราไม่ทำแล้ว เพราะ @bind ย้ายไปอยู่ใน .class
+
+  // (CHANGED) เรียกแบบ async เพื่อได้ชุด class จาก theme เหมือน provider Suggest
+  const themeClassSet = await getThemeClassSet();
+
+  // (CHANGED) เรียกฟังก์ชันตรวจสอบ @bind ภายในแต่ละ class
+  checkBindLines(scopeName, classNameDefs, themeClassSet);
 
   // (F) สร้าง CSS ของ keyframe blocks
-  //     (เรารู้ finalName ของแต่ละ kf แล้วจาก keyframeNameMap)
   const keyframeCss = buildKeyframesCSS(keyframeBlocks, keyframeNameMap, scopeName);
 
-  // (G) สร้าง CSS ของ class ต่าง ๆ (ตามลำดับ)
+  // (G) สร้าง CSS ของ class ต่าง ๆ
   let finalCss = keyframeCss; // วาง keyframe ก่อน
   for (const [displayKey, styleDef] of classNameDefs.entries()) {
     finalCss += buildCssText(displayKey, styleDef, shortNameToFinal, scopeName);
@@ -124,10 +126,10 @@ export async function createCssCtrlCssFile(doc: vscode.TextDocument) {
   edit.replace(doc.uri, fullRange, finalText);
   await vscode.workspace.applyEdit(edit);
 
-  // (2) generate CSS
+  // (2) generate CSS (CHANGED ให้เป็น await)
   let generatedCss: string;
   try {
-    generatedCss = generateCssCtrlCssFromSource(finalText.replace(importLine, ''));
+    generatedCss = await generateCssCtrlCssFromSource(finalText.replace(importLine, ''));
   } catch (err) {
     vscode.window.showErrorMessage(`CSS-CTRL parse error: ${(err as Error).message}`);
     throw err;
@@ -140,24 +142,60 @@ export async function createCssCtrlCssFile(doc: vscode.TextDocument) {
 }
 
 /**
- * getThemeClassSet:
- * - สแกน workspace หาไฟล์ ctrl.theme.ts (ถ้ามี)
- * - เรียก parseThemeClassFull => ได้ object { box1: "...", box2:"..." } จาก theme.class(...)
- * - คืนเป็น Set<string> ของ key
+ * (CHANGED) เปลี่ยนเป็น async เพื่อใช้ workspace.findFiles
  */
-function getThemeClassSet(): Set<string> {
-  const folders = vscode.workspace.workspaceFolders;
-  if (!folders || folders.length === 0) {
+async function getThemeClassSet(): Promise<Set<string>> {
+  const files = await vscode.workspace.findFiles('**/ctrl.theme.ts', '**/node_modules/**', 1);
+  if (!files || files.length === 0) {
     return new Set();
   }
-
-  // ลองสมมุติว่าไฟล์ ctrl.theme.ts อยู่ที่ root folder
-  const rootPath = folders[0].uri.fsPath;
-  const themeFilePath = path.join(rootPath, 'ctrl.theme.ts');
+  const themeFilePath = files[0].fsPath;
   if (!fs.existsSync(themeFilePath)) {
     return new Set();
   }
-
-  const classMap = parseThemeClassFull(themeFilePath); // => { box1:"...", box2:"..." }
+  const classMap = parseThemeClassFull(themeFilePath);
   return new Set(Object.keys(classMap));
+}
+
+// (CHANGED) ไม่ต้องเป็น async เพราะไม่ได้หาธีมเอง
+function checkBindLines(
+  scopeName: string,
+  classMap: Map<string, IStyleDefinition>,
+  themeClassSet: Set<string>
+) {
+  for (const [displayKey, styleDef] of classMap.entries()) {
+    if (!(styleDef as any)._bindLines) {
+      continue;
+    }
+    const bindLines = (styleDef as any)._bindLines as string[];
+
+    for (const bindLine of bindLines) {
+      const raw = bindLine.replace('@bind', '').trim();
+      if (!raw) {
+        continue;
+      }
+      const refs = raw.split(/\s+/);
+      for (const ref of refs) {
+        if (!ref.startsWith('.')) {
+          throw new Error(`[CSS-CTRL-ERR] @bind usage must reference classes with a dot. got "${ref}"`);
+        }
+        const shortCls = ref.slice(1);
+        let finalKey = scopeName === 'none' ? shortCls : `${scopeName}_${shortCls}`;
+
+        const isLocal = classMap.has(finalKey);
+        const isTheme = themeClassSet.has(shortCls);
+
+        if (isLocal && isTheme) {
+          throw new Error(
+            `[CSS-CTRL-ERR] Conflict: class ".${shortCls}" is declared in both .ctrl.ts and theme.class(...)`
+          );
+        }
+        if (!isLocal && !isTheme) {
+          throw new Error(
+            `[CSS-CTRL-ERR] No class named ".${shortCls}" found in either .ctrl.ts or theme.class(...)`
+          );
+        }
+      }
+    }
+  }
 }

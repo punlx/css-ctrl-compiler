@@ -1,12 +1,6 @@
 // src/generateCssCommand/parsers/parseDirectives.ts
 
-import {
-  IParseDirectivesResult,
-  IParsedDirective,
-  IClassBlock,
-  IConstBlock,
-  IKeyframeBlock,
-} from '../types';
+import { IParseDirectivesResult, IParsedDirective, IClassBlock, IConstBlock, IKeyframeBlock } from '../types';
 import { createEmptyStyleDef } from '../helpers/createEmptyStyleDef';
 import { parseClassBlocksWithBraceCounting } from '../helpers/parseClassBlocksWithBraceCounting';
 import { parseSingleAbbr } from './parseSingleAbbr';
@@ -80,8 +74,9 @@ export function parseDirectives(text: string): IParseDirectivesResult {
     const dirValue = dMatch[2].trim();
 
     // ข้าม @use และ @query
-    if (dirName === 'use' || dirName === 'query') {
-      continue;
+    // (CHANGED) เพิ่ม || dirName === 'bind' เพื่อละเว้น @bind top-level
+    if (dirName === 'use' || dirName === 'query' || dirName === 'bind') {
+      continue; // (CHANGED) ไม่ให้ดึงเป็น directive อีกต่อไป
     }
     directives.push({ name: dirName, value: dirValue });
     newText = newText.replace(dMatch[0], '').trim();
@@ -125,7 +120,7 @@ function mergeLineForConst(lines: string[]): string[] {
         const ahead = trimmed.slice(i - 5, i + 1).toLowerCase();
         // ถ้าเจอเช่น "rgba(", "calc(", "hsl(", "url(", ...
         if (
-          /\b(rgba|rgb|calc|hsl|hsla|url|clamp|var|min|max|attr|counter|counters|env|repeat|linear-gradient|radial-gradient|conic-gradient|image-set|matrix|translate|translateX|translateY|translateZ|translate3d|scale|scaleX|scaleY|scaleZ|scale3d|rotate|rotateX|rotateY|rotateZ|rotate3d|skew|skewX|skewY|perspective)\($/.test(
+          /\b(rgba|rgb|calc|hsl|hsla|url|clamp|var|min|max|attr|counter|counters|env|repeat|linear-gradient|radial-gradient|conic-gradient|image-set|matrix|translate|translatex|translatey|translatez|translate3d|scale|scalex|scaley|scalez|scale3d|rotate|rotatex|rotatey|rotatez|rotate3d|skew|skewx|skewy|perspective)\($/.test(
             ahead
           )
         ) {
@@ -133,7 +128,6 @@ function mergeLineForConst(lines: string[]): string[] {
         } else {
           // DSL parentheses
           if (parenCount > 0 && !inCssFunc) {
-            // ยังมี DSL paren ค้าง => nested DSL => ถ้าอยาก error ก็โยน
             throw new Error(
               `[CSS-CTRL-ERR] Nested DSL parentheses not allowed. Found: "${trimmed}"`
             );
@@ -142,7 +136,6 @@ function mergeLineForConst(lines: string[]): string[] {
         }
       } else if (ch === ')') {
         if (inCssFunc) {
-          // ปิดฟังก์ชัน CSS
           inCssFunc = false;
         } else {
           parenCount--;
@@ -170,7 +163,7 @@ function mergeLineForConst(lines: string[]): string[] {
 
   if (buffer) {
     if (parenCount !== 0) {
-      throw new Error(`[CSS-CTRL-ERR] Missing closing ")" in @const parentheses.`);
+      throw new Error('[CSS-CTRL-ERR] Missing closing ")" in @const parentheses.');
     }
     result.push(buffer);
   }

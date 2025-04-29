@@ -77,10 +77,10 @@ function parseNestedQueryDef(
   return out;
 }
 
-
 /**
- * processClassBlocks - parse .className { ... } => สร้าง styleDef => ใส่ลง map
- * return ทั้ง Map<finalKey, styleDef> และ shortNameToFinal เพื่อรองรับ @scope.xxx
+ * processClassBlocks
+ *  - parse .className { ... } => สร้าง styleDef => ใส่ลง map
+ *  - return Map<finalKey, styleDef> และ shortNameToFinal
  *
  * (CHANGED) จุดสำคัญคือเปลี่ยนฟังก์ชัน mergeMultiLineParen เป็น mergeLineForClass
  */
@@ -118,10 +118,21 @@ export function processClassBlocks(
     let usedConstNames: string[] = [];
     const normalLines: string[] = [];
 
+    // (CHANGED) เพิ่มเช็ค @bind ภายใน .class
     for (const ln of mergedLines) {
       if (ln.startsWith('@use ')) {
         usedConstNames.push(...ln.replace('@use', '').trim().split(/\s+/));
-      } else {
+      }
+      // (CHANGED) ตรวจจับ @bind
+      else if (ln.startsWith('@bind ')) {
+        // สร้าง array ไว้เก็บบรรทัด bind ถ้าไม่มี
+        if (!(classStyleDef as any)._bindLines) {
+          (classStyleDef as any)._bindLines = [];
+        }
+        // push บรรทัด bind นี้เก็บไว้ (ยังไม่ parse หรือ gen CSS)
+        (classStyleDef as any)._bindLines.push(ln);
+      }
+      else {
         normalLines.push(ln);
       }
     }
@@ -163,7 +174,6 @@ export function processClassBlocks(
   return { classMap, shortNameToFinal };
 }
 
-
 /**
  * (CHANGED) mergeLineForClass
  * คล้าย mergeMultiLineParen เดิม แต่ยอมให้มีฟังก์ชัน CSS ใน property value
@@ -183,7 +193,11 @@ function mergeLineForClass(lines: string[]): string[] {
       if (ch === '(') {
         // สแกนว่าคือ CSS function รึเปล่า
         const ahead = trimmed.slice(Math.max(0, i - 5), i + 1).toLowerCase();
-        if (/\b(rgba|rgb|calc|hsl|hsla|url|clamp|var|min|max|attr|counter|counters|env|repeat|linear-gradient|radial-gradient|conic-gradient|image-set|matrix|translate|translateX|translateY|translateZ|translate3d|scale|scaleX|scaleY|scaleZ|scale3d|rotate|rotateX|rotateY|rotateZ|rotate3d|skew|skewX|skewY|perspective)\($/.test(ahead)) {
+        if (
+          /\b(rgba|rgb|calc|hsl|hsla|url|clamp|var|min|max|attr|counter|counters|env|repeat|linear-gradient|radial-gradient|conic-gradient|image-set|matrix|translate|translatex|translatey|translatez|translate3d|scale|scalex|scaley|scalez|scale3d|rotate|rotatex|rotatey|rotatez|rotate3d|skew|skewx|skewy|perspective)\($/.test(
+            ahead
+          )
+        ) {
           inCssFunc = true;
         } else {
           // DSL parentheses

@@ -1,7 +1,6 @@
 // src/createBindClassProvider.ts
+
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
 import { parseThemeClassFull } from './parseTheme';
 
 /**
@@ -60,13 +59,26 @@ export function createBindClassProvider() {
         // 6) หา class ที่ใช้ในบรรทัดนี้ไปแล้ว
         const usedClasses = getUsedClassesInLine(lineText);
 
+        // (CHANGED) 6.1) หา "current class name" จากตำแหน่ง cursor
+        // เช่น ถ้าอยู่ภายใต้ .box { ... } => currentClassName = "box"
+        const currentClassName = findCurrentClassName(document, position);
+
         // 7) Filter เอาเฉพาะคลาสที่ยังไม่ถูกใช้
-        const availableClasses = allClasses.filter((cls) => !usedClasses.has(cls));
+        // (CHANGED) + ถ้า cls === currentClassName และเป็น local => skip
+        const availableClasses = allClasses.filter((cls) => {
+          if (usedClasses.has(cls)) {
+            return false;
+          }
+          // skip ถ้าเป็น class ตัวเอง (local)
+          if (cls === currentClassName && !themeClassSet.has(cls)) {
+            return false;
+          }
+          return true;
+        });
 
         // 8) สร้าง CompletionItem
         const completions: vscode.CompletionItem[] = [];
         for (const cls of availableClasses) {
-          // สร้าง item
           const item = new vscode.CompletionItem(cls, vscode.CompletionItemKind.Class);
 
           // ถ้ามาจาก theme.class => label = "<cls> (theme)"
@@ -143,6 +155,25 @@ function getUsedClassesInLine(lineText: string): Set<string> {
 }
 
 /**
+ * (CHANGED) findCurrentClassName:
+ *   สแกนย้อนขึ้นไปจากบรรทัด position.line ว่าเราอยู่ใน block ".xxx { ... }" ไหน
+ *   ถ้าไม่เจอ => return undefined
+ */
+function findCurrentClassName(document: vscode.TextDocument, position: vscode.Position): string | undefined {
+  let lineNum = position.line;
+  while (lineNum >= 0) {
+    const lineText = document.lineAt(lineNum).text;
+    // เจอ "xxx {" ไหม (ไม่สน pseudo, etc.)
+    const m = lineText.match(/^\s*\.(\w+)\s*\{/);
+    if (m) {
+      return m[1];
+    }
+    lineNum--;
+  }
+  return undefined;
+}
+
+/**
  * getAllThemeClassKeys:
  * - พยายามหาไฟล์ ctrl.theme.ts ใน workspace
  * - ถ้าเจอ => parseThemeClassFull => ได้ object { box1:"...", box2:"..." }
@@ -153,7 +184,6 @@ async function getAllThemeClassKeys(): Promise<string[]> {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) return [];
 
-  // หาไฟล์ ctrl.theme.ts แบบ recursive ทั่ว workspace
   const themeFilePath = await findCtrlThemeFileInWorkspace();
   if (!themeFilePath) {
     return [];

@@ -329,11 +329,12 @@ function generateGeneric(sourceCode: string): string {
   }
 
   // ---------------------------------------------------------------------------
-  // 6) แยก directive @scope, @bind, @const, @keyframe ออกจากเนื้อหา
+  // 6) แยก directive @scope, @const, @keyframe ออกจากเนื้อหา
+  //    (CHANGED) ตัด logic แยก @bind ออก (ให้ไหลเป็น normalLines แทน)
   // ---------------------------------------------------------------------------
   const lines = templateContent.split('\n');
   const scopeLines: string[] = [];
-  const bindLines: string[] = [];
+  // (REMOVED) const bindLines: string[] = [];
   const constBlocks: string[][] = [];
   const normalLines: string[] = [];
 
@@ -356,11 +357,9 @@ function generateGeneric(sourceCode: string): string {
         i++;
         continue;
       }
-      if (trimmed.startsWith('@bind ')) {
-        bindLines.push(normalizeDirectiveLine(trimmed));
-        i++;
-        continue;
-      }
+      // (CHANGED) ลบส่วนตรวจ @bind ออก ให้มันไปอยู่ใน normalLines
+      // if (trimmed.startsWith('@bind ')) { ... } => ลบทิ้ง
+
       if (trimmed.startsWith('@const ') || trimmed.startsWith('@keyframe ')) {
         const blockLines: string[] = [];
         blockLines.push(trimmed);
@@ -386,19 +385,19 @@ function generateGeneric(sourceCode: string): string {
   }
 
   // ---------------------------------------------------------------------------
-  // 7) สร้าง Type ของ @bind => <bindKey>: []
+  // 7) (CHANGED) ไม่สร้าง Type ของ @bind แล้ว => ลบ bindKeys / bindEntries
   // ---------------------------------------------------------------------------
-  const bindKeys: string[] = [];
-  for (const bLine of bindLines) {
-    const tokens = bLine.split(/\s+/);
-    if (tokens.length > 1) {
-      bindKeys.push(tokens[1]);
-    }
-  }
-  const bindEntries = bindKeys.map((k) => `${k}: []`);
+  // const bindKeys: string[] = [];
+  // for (const bLine of bindLines) {
+  //   const tokens = bLine.split(/\s+/);
+  //   if (tokens.length > 1) {
+  //     bindKeys.push(tokens[1]);
+  //   }
+  // }
+  // const bindEntries = bindKeys.map((k) => `${k}: []`);
 
   // ---------------------------------------------------------------------------
-  // 8) สร้าง entries ของ classMap
+  // 8) สร้าง entries ของ classMap (เหมือนเดิม)
   // ---------------------------------------------------------------------------
   const classEntries = Object.keys(classMap).map((clsName) => {
     const arr = Array.from(classMap[clsName]);
@@ -406,7 +405,9 @@ function generateGeneric(sourceCode: string): string {
     return `${clsName}: [${arrLiteral}]`;
   });
 
-  const allEntries = [...bindEntries, ...classEntries];
+  // (CHANGED) เดิม allEntries = [...bindEntries, ...classEntries]
+  //           ตอนนี้เหลือเฉพาะ classEntries
+  const allEntries = [...classEntries];
   const finalGeneric = `{ ${allEntries.join('; ')} }`;
 
   // ---------------------------------------------------------------------------
@@ -459,10 +460,11 @@ function generateGeneric(sourceCode: string): string {
   for (const s of scopeLines) {
     finalLines.push(`${indentUnit}${s}`);
   }
-  for (const b of bindLines) {
-    finalLines.push(`${indentUnit}${b}`);
-  }
-  if (scopeLines.length > 0 || bindLines.length > 0) {
+  // (CHANGED) ลบส่วน push bindLines
+  // for (const b of bindLines) {
+  //   finalLines.push(`${indentUnit}${b}`);
+  // }
+  if (scopeLines.length > 0 /* || bindLines.length > 0 */) {
     finalLines.push('');
   }
   formattedConstBlocks.forEach((block, idx) => {

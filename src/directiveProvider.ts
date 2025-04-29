@@ -1,3 +1,5 @@
+// src/directiveProvider.ts
+
 import * as vscode from 'vscode';
 
 export function createDirectiveProvider() {
@@ -27,7 +29,7 @@ export function createDirectiveProvider() {
           return [makeItem('scope', 'CSS-CTRL directive @scope (after @query or >)')];
         }
 
-        // 3) ถ้าไม่เข้าเคสพิเศษ => ใช้ blockStack logic เดิม
+        // 3) ใช้ blockStack logic เดิม
         const stack = findBlockStack(document, position);
 
         // อยู่ในบล็อก @const => ไม่แนะนำ directive อื่น
@@ -35,10 +37,12 @@ export function createDirectiveProvider() {
           return undefined;
         }
 
-        // อยู่ในบล็อก .class => แนะนำ use, query
+        // อยู่ในบล็อก .class => แนะนำ use, (CHANGED) bind
+        // (CHANGED) คอมเมนต์ query ออกอยู่แล้ว
         if (stack.includes('class')) {
           return [
             makeItem('use', 'CSS-CTRL directive @use (in class)'),
+            makeItem('bind', 'CSS-CTRL Bind directive (in class)'),
             // makeItem('query', 'CSS-CTRL directive @query (in class)'),
           ];
         }
@@ -48,10 +52,10 @@ export function createDirectiveProvider() {
           return [makeItem('scope', 'CSS-CTRL directive @scope (in query)')];
         }
 
-        // Top-level => แนะนำ scope, bind, const, keyframe
+        // (CHANGED) Top-level => แนะนำ scope, const, keyframe (ลบ bind)
         return [
           makeItem('scope', 'CSS-CTRL Scope directive'),
-          makeItem('bind', 'CSS-CTRL Bind directive'),
+          // (CHANGED) ลบ bind ออก
           makeItem('const', 'CSS-CTRL Abbe Constant directive'),
           makeItem('keyframe', 'CSS-CTRL Keyframe directive'),
         ];

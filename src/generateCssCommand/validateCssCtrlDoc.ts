@@ -10,7 +10,8 @@ import { generateCssCtrlCssFromSource } from './createCssCtrlCssCommand';
 // validateCssCtrlDoc: ตรวจสอบไฟล์ .ctrl.ts เพื่อดูว่ามี error ตอน parse หรือไม่
 // - ถ้ามี error => ใส่ Diagnostic
 // - ถ้าไม่มี => ลบ Diagnostic
-export function validateCssCtrlDoc(
+// (CHANGED) ปรับเป็น async เพื่อ await generateCssCtrlCssFromSource
+export async function validateCssCtrlDoc(
   doc: vscode.TextDocument,
   diagCollection: vscode.DiagnosticCollection
 ) {
@@ -18,7 +19,9 @@ export function validateCssCtrlDoc(
 
   try {
     const sourceText = doc.getText();
-    generateCssCtrlCssFromSource(sourceText);
+    // (CHANGED) ใส่ await เพราะ generateCssCtrlCssFromSource เป็น async
+    await generateCssCtrlCssFromSource(sourceText);
+
   } catch (err: any) {
     const diag: vscode.Diagnostic = {
       message: err.message,
