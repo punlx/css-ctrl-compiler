@@ -19,9 +19,9 @@ import { parsePluginContainerStyle } from './parsePluginContainerStyle';
  * parseSingleAbbr
  * @param abbrLine         ex. "bg[red]" or "hover(bg[red])" or "@query .box { ... }"
  * @param styleDef
- * @param isConstContext   true => in @const or theme.define block
+ * @param isConstContext   true => in @const or theme.property block
  * @param isQueryBlock     true => we are inside an @query block (=> disallow $variable)
- * @param isDefineContext  true => theme.define
+ * @param isDefineContext  true => theme.property
  * @param keyframeNameMap  (NEW) สำหรับ rename keyframe (move => app_move)
  */
 export function parseSingleAbbr(
@@ -34,17 +34,17 @@ export function parseSingleAbbr(
 ) {
   const trimmed = abbrLine.trim();
 
-  // ไม่อนุญาต $var ใน define block
+  // ไม่อนุญาต $var ใน property block
   if (isDefineContext && /^\$[\w-]+\[/.test(trimmed)) {
     throw new Error(
-      `[CSS-CTRL-ERR] $variable is not allowed in theme.define block. Found: "${trimmed}"`
+      `[CSS-CTRL-ERR] $variable is not allowed in theme.property block. Found: "${trimmed}"`
     );
   }
 
-  // ไม่อนุญาต @query ใน @const/@define
+  // ไม่อนุญาต @query ใน @const/@property
   if (isConstContext && trimmed.startsWith('@query')) {
     throw new Error(
-      `[CSS-CTRL-ERR] @query is not allowed in @const or theme.define() block. Found: "${trimmed}"`
+      `[CSS-CTRL-ERR] @query is not allowed in @const or theme.property() block. Found: "${trimmed}"`
     );
   }
 

@@ -56,7 +56,7 @@ export function createDefineProvider(defineMap: Record<string, string[]>) {
           item.insertText = subKey;
 
           // ใส่ detail / doc ถ้าต้องการ
-          item.detail = `(theme.define) ${subKey}`;
+          item.detail = `(theme.property) ${subKey}`;
           completions.push(item);
         }
 

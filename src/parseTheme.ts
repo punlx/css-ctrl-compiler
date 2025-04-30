@@ -181,8 +181,8 @@ export function parseThemeVariableDict(themeFilePath: string): Record<string, st
 
 /**
  * parseThemeDefine:
- *  - หา theme.define({...}) => เช่น
- *    theme.define({
+ *  - หา theme.property({...}) => เช่น
+ *    theme.property({
  *      button: {
  *        primary: `...`,
  *        secondary: `...`
@@ -200,8 +200,8 @@ export function parseThemeDefine(themeFilePath: string): Record<string, string[]
 
   const fileContent = fs.readFileSync(themeFilePath, 'utf8');
 
-  // จับบล็อก theme.define({ ... })
-  const defineRegex = /theme\.define\s*\(\s*\{\s*([\s\S]*?)\}\s*\)/m;
+  // จับบล็อก theme.property({ ... })
+  const defineRegex = /theme\.property\s*\(\s*\{\s*([\s\S]*?)\}\s*\)/m;
   const mainMatch = defineRegex.exec(fileContent);
   if (!mainMatch) return res;
 
@@ -241,8 +241,8 @@ export function parseThemeDefineFull(
 
   const fileContent = fs.readFileSync(themeFilePath, 'utf8');
 
-  // จับบล็อก theme.define({ ... })
-  const defineRegex = /theme\.define\s*\(\s*\{\s*([\s\S]*?)\}\s*\)/m;
+  // จับบล็อก theme.property({ ... })
+  const defineRegex = /theme\.property\s*\(\s*\{\s*([\s\S]*?)\}\s*\)/m;
   const mainMatch = defineRegex.exec(fileContent);
   if (!mainMatch) return res;
 

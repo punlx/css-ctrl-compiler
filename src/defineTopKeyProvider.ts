@@ -40,7 +40,7 @@ export function createDefineTopKeyProvider(defineMap: Record<string, string[]>) 
         }
         const prefix = wordMatch[1].toLowerCase();
 
-        // 4) collect all define topKey => Object.keys(defineMap)
+        // 4) collect all property topKey => Object.keys(defineMap)
         //    สมมุติ ["button","card","link","xyz"] ...
         const allKeys = Object.keys(defineMap);
 
@@ -52,7 +52,7 @@ export function createDefineTopKeyProvider(defineMap: Record<string, string[]>) 
           const item = new vscode.CompletionItem(k, vscode.CompletionItemKind.Constructor);
           // เวลาเลือก -> แทน prefix ด้วย k
           // => range we might specify or let VSCode do auto
-          item.detail = `(theme.define) ${k}`;
+          item.detail = `(theme.property) ${k}`;
           return item;
         });
 

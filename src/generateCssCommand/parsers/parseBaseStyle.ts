@@ -26,7 +26,7 @@ export function parseBaseStyle(
   const { line: abbrLineNoBang, isImportant } = detectImportantSuffix(abbrLine);
   if (isConstContext && isImportant) {
     throw new Error(
-      `[CSS-CTRL-ERR] !important is not allowed in @const (or theme.define) block. Found: "${abbrLine}"`
+      `[CSS-CTRL-ERR] !important is not allowed in @const (or theme.property) block. Found: "${abbrLine}"`
     );
   }
 
@@ -38,7 +38,7 @@ export function parseBaseStyle(
   // ถ้า abbrMap กับ globalDefineMap มีชื่อชนกัน => throw
   if (styleAbbr in abbrMap && styleAbbr in globalDefineMap) {
     throw new Error(
-      `[CSS-CTRL-ERR] "${styleAbbr}" is defined in both abbrMap and theme.define(...) - name collision not allowed.`
+      `[CSS-CTRL-ERR] "${styleAbbr}" is defined in both abbrMap and theme.property(...) - name collision not allowed.`
     );
   }
 
@@ -198,7 +198,7 @@ export function parseBaseStyle(
   }
 
   // -----------------------------------------------------------------------
-  // (D) ถ้าไม่เจอใน abbrMap => อาจเป็น define?
+  // (D) ถ้าไม่เจอใน abbrMap => อาจเป็น property?
   // -----------------------------------------------------------------------
   if (!(styleAbbr in abbrMap)) {
     if (styleAbbr in globalDefineMap) {
@@ -214,13 +214,13 @@ export function parseBaseStyle(
       }
       const partialDef = globalDefineMap[styleAbbr][subK];
       if (!partialDef) {
-        throw new Error(`[CSS-CTRL-ERR] "${styleAbbr}[${subK}]" not found in theme.define(...).`);
+        throw new Error(`[CSS-CTRL-ERR] "${styleAbbr}[${subK}]" not found in theme.property(...).`);
       }
       mergeStyleDef(styleDef, partialDef);
       return;
     }
     throw new Error(
-      `[CSS-CTRL-ERR] "${styleAbbr}" not defined in style abbreviation or theme.define(...) (line: ${abbrLine})`
+      `[CSS-CTRL-ERR] "${styleAbbr}" not defined in style abbreviation or theme.property(...) (line: ${abbrLine})`
     );
   }
 

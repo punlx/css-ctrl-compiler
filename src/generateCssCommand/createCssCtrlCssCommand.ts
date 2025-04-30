@@ -15,7 +15,7 @@ import { parseThemeClassFull } from '../parseTheme';
 import { formatCss } from '../formatters/formatCss';
 
 /**
- * globalDefineMap – ถ้าต้องการฟีเจอร์ @const / theme.define ข้ามไฟล์
+ * globalDefineMap – ถ้าต้องการฟีเจอร์ @const / theme.property ข้ามไฟล์
  * อาจประกาศไว้ตรงนี้ หรือ import มาจากที่อื่น
  */
 export const globalDefineMap: Record<string, Record<string, IStyleDefinition>> = {};
