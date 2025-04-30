@@ -104,7 +104,7 @@ export function createBindClassProvider() {
  * สแกนทั้งไฟล์ document => หา .className {
  * ข้าม class ถ้าบรรทัดประกาศนั้นมี "@query"
  */
-function getAllClasses(document: vscode.TextDocument): string[] {
+export function getAllClasses(document: vscode.TextDocument): string[] {
   const text = document.getText();
   const classSet = new Set<string>();
 
@@ -159,7 +159,10 @@ function getUsedClassesInLine(lineText: string): Set<string> {
  *   สแกนย้อนขึ้นไปจากบรรทัด position.line ว่าเราอยู่ใน block ".xxx { ... }" ไหน
  *   ถ้าไม่เจอ => return undefined
  */
-function findCurrentClassName(document: vscode.TextDocument, position: vscode.Position): string | undefined {
+function findCurrentClassName(
+  document: vscode.TextDocument,
+  position: vscode.Position
+): string | undefined {
   let lineNum = position.line;
   while (lineNum >= 0) {
     const lineText = document.lineAt(lineNum).text;
@@ -180,7 +183,7 @@ function findCurrentClassName(document: vscode.TextDocument, position: vscode.Po
  * - คืนเป็น array ของ key
  * - ถ้าไม่มีไฟล์ หรือไม่มี theme.class => คืน []
  */
-async function getAllThemeClassKeys(): Promise<string[]> {
+export async function getAllThemeClassKeys(): Promise<string[]> {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) return [];
 

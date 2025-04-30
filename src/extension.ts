@@ -49,6 +49,9 @@ import { updateQueryDecorations, registerAutoInsertSpaceWhenGt } from './ghostQu
 /* ------------------ (NEW) import for autoDeleteProvider ------------------ */
 import { createCssCtrlAutoDeleteProvider } from './autoDeleteProvider';
 
+/* ------------------ (NEW) import ghostBindDecorations ------------------ */
+import { updateBindDecorations } from './ghostBindDecorations';
+
 export let globalBreakpointDict: Record<string, string> = {};
 export let globalTypographyDict: Record<string, string> = {};
 
@@ -150,6 +153,9 @@ export async function activate(context: vscode.ExtensionContext) {
     // (NEW) updateQueryDecorations
     updateQueryDecorations(vscode.window.activeTextEditor);
     registerAutoInsertSpaceWhenGt(context);
+
+    // (NEW) updateBindDecorations
+    updateBindDecorations(vscode.window.activeTextEditor);
   }
 
   const changeEditorDisposable = vscode.window.onDidChangeActiveTextEditor((editor) => {
@@ -158,6 +164,8 @@ export async function activate(context: vscode.ExtensionContext) {
       updateSpacingDecorations(editor);
       updateImportantDecorations(editor);
       updateQueryDecorations(editor);
+      // (NEW) updateBindDecorations
+      updateBindDecorations(editor);
     }
   });
   context.subscriptions.push(changeEditorDisposable);
@@ -169,6 +177,8 @@ export async function activate(context: vscode.ExtensionContext) {
       updateSpacingDecorations(editor);
       updateImportantDecorations(editor);
       updateQueryDecorations(editor);
+      // (NEW) updateBindDecorations
+      updateBindDecorations(editor);
     }
   });
   context.subscriptions.push(changeDocDisposable);
