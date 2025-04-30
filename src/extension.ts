@@ -282,11 +282,22 @@ export async function activate(context: vscode.ExtensionContext) {
     if (savedDoc.fileName.endsWith('ctrl.theme.ts')) {
       e.waitUntil(
         (async () => {
+          // (1) เรียกสร้างไฟล์ ctrl.theme.css พร้อมตรวจ error (Diagnostic) ภายใน
           try {
-            await createCssCtrlThemeCssFile(savedDoc);
+            await createCssCtrlThemeCssFile(savedDoc, cssCtrlDiagnosticCollection);
           } catch (error) {
-            console.error('Error generating ctrl.theme.css =>', error);
+            // ถ้า error เกิด ในฟังก์ชัน createCssCtrlThemeCssFile เอง
+            // ได้สร้าง diagnostic + showErrorMessage ไปแล้ว จึงไม่ต้องทำอะไรเพิ่ม
+            return;
           }
+          // (2) ตรวจดูว่ามี error ใน diagnostic อีกไหม
+          const diags = cssCtrlDiagnosticCollection.get(savedDoc.uri);
+          const hasErr = diags && diags.some((d) => d.severity === vscode.DiagnosticSeverity.Error);
+          if (hasErr) {
+            return;
+          }
+          // (3) ถ้าไม่มี error สามารถทำอย่างอื่นต่อได้ตามต้องการ
+          // เช่น vscode.commands.executeCommand('ctrl.generateGeneric');
         })()
       );
     }

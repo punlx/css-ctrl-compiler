@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { abbrMap } from './constants/abbrMap'; // <-- import มาให้แล้ว เอาไปใช้เลย
+import { abbrMap } from './constants/abbrMap'; // <-- import มาให้แล้ว เอาไปใช้เลย เอาไว้ map shorthand => property
 
 // (NEW) import เพื่อใช้ parseSingleAbbr, createEmptyStyleDef, buildCssText
 import { parseSingleAbbr } from './parsers/parseSingleAbbr';
@@ -78,6 +78,18 @@ function parseKeyframeAbbr(
 }
 
 function parseKeyframeString(keyframeName: string, rawStr: string): string {
+  // ตรวจจับการใช้ $ หรือ --& ภายใน theme.keyframe
+  if (rawStr.includes('$')) {
+    throw new Error(
+      `[CSS-CTRL-ERR] $variable is not allowed in theme.keyframe("${keyframeName}").`
+    );
+  }
+  if (rawStr.includes('--&')) {
+    throw new Error(
+      `[CSS-CTRL-ERR] local var (--&xxx) is not allowed in theme.keyframe("${keyframeName}").`
+    );
+  }
+
   const regex = /(\b(?:\d+%|from|to))\(([^)]*)\)/g;
   let match: RegExpExecArray | null;
   const blocks: Array<{ label: string; css: string }> = [];
@@ -128,7 +140,6 @@ interface IParseResult {
   palette: string[][] | null;
   variable: Record<string, string>;
   keyframe: Record<string, string>;
-
   // (NEW) เพิ่ม classMap สำหรับ theme.class
   classMap?: Record<string, string>;
 }
@@ -138,7 +149,7 @@ function parseCssCtrlThemeSource(sourceText: string): IParseResult {
     palette: null,
     variable: {},
     keyframe: {},
-    classMap: {}, // เริ่มเป็น obj ว่าง
+    classMap: {},
   };
 
   const paletteRegex = /theme\.palette\s*\(\s*\[([\s\S]*?)\]\s*\)/;
@@ -204,7 +215,6 @@ function parseCssCtrlThemeSource(sourceText: string): IParseResult {
           `[CSS-CTRL-ERR] theme.class(...) not allowed to use $var, --&var, @use, or @query. Found in class "${className}".`
         );
       }
-      // ใส่ลง result.classMap
       result.classMap![className] = dsl.trim();
     }
   }
@@ -256,10 +266,19 @@ function generateThemeClassCSS(classMap: Record<string, string>): string {
   return outCss;
 }
 
-export async function createCssCtrlThemeCssFile(doc: vscode.TextDocument) {
+// ----------------------------------------------------
+// (CHANGED) เพิ่มพารามิเตอร์ diagCollection + สร้าง Diagnostic
+// ----------------------------------------------------
+export async function createCssCtrlThemeCssFile(
+  doc: vscode.TextDocument,
+  diagCollection: vscode.DiagnosticCollection
+) {
   if (!doc.fileName.endsWith('ctrl.theme.ts')) {
     return;
   }
+
+  // ลบ Diagnostic เก่า (ถ้ามี) ก่อน
+  diagCollection.delete(doc.uri);
 
   const fileName = path.basename(doc.fileName);
   const baseName = fileName.replace(/\.ts$/, '');
@@ -290,9 +309,20 @@ export async function createCssCtrlThemeCssFile(doc: vscode.TextDocument) {
   let generatedCss: string;
   try {
     generatedCss = generateCssCtrlThemeCssFromSource(finalText.replace(importLine, ''));
-  } catch (err) {
-    vscode.window.showErrorMessage(`CSS-CTRL theme parse error: ${(err as Error).message}`);
-    throw err;
+  } catch (err: any) {
+    // (ADDED) สร้าง Diagnostic เพื่อให้แสดงใน Problems Panel
+    const diag: vscode.Diagnostic = {
+      message: err.message,
+      severity: vscode.DiagnosticSeverity.Error,
+      range: new vscode.Range(0, 0, 0, 0),
+      source: 'CSS-CTRL Theme',
+    };
+    diagCollection.set(doc.uri, [diag]);
+
+    // ยังแสดงเป็น Notification เหมือนเดิม
+    vscode.window.showErrorMessage(`CSS-CTRL theme parse error: ${err.message}`);
+
+    throw err; // จะหยุด process ตรงนี้
   }
 
   const formattedCss = await formatCss(generatedCss);
