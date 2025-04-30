@@ -139,6 +139,92 @@ function formatInsidePseudo(content: string, indent: string): string {
   return formatted.join('\n');
 }
 
+// ----------------------------------------------------------
+// (ฟังก์ชันใหม่) สำหรับ format multi-line keyframe block
+// ----------------------------------------------------------
+function formatKeyframeBlocks(code: string): string {
+  // หา @keyframe someName { ... } แล้ว format ข้างใน
+  const keyframeRegex = /@keyframe\s+([\w-]+)\s*\{([\s\S]*?)\}/g;
+  return code.replace(keyframeRegex, (fullMatch, kfName, kfBody, offset, fullString) => {
+    // หา indent base จากบรรทัดก่อนหน้า (คล้ายกับ formatPseudoFunctions)
+    const linesBefore = fullString.substring(0, offset).split('\n');
+    const lastLine = linesBefore[linesBefore.length - 1];
+    const matchIndent = /^(\s*)/.exec(lastLine);
+    const baseIndent = matchIndent ? matchIndent[1] : '';
+    // format ส่วน body ด้านใน
+    const formattedBody = formatKeyframeBody(kfBody, baseIndent + indentUnit);
+    // ประกอบกลับ
+    return `@keyframe ${kfName} {\n${formattedBody}\n${baseIndent}}`;
+  });
+}
+
+function formatKeyframeBody(body: string, indent: string): string {
+  let i = 0;
+  const len = body.length;
+  let result = '';
+  let isFirstStep = true; // เพิ่มตัวแปรนี้เช็ค step แรก
+
+  while (i < len) {
+    const stepRegex = /\b(from|to|\d+%)\s*\(/g;
+    stepRegex.lastIndex = i;
+    const match = stepRegex.exec(body);
+    if (!match) {
+      result += body.slice(i).trimEnd();
+      break;
+    }
+    const foundIndex = match.index;
+    const stepName = match[1];
+    result += body.slice(i, foundIndex).trimEnd();
+
+    const openParenPos = foundIndex + stepName.length;
+    let depth = 0;
+    let endParen = -1;
+    for (let j = openParenPos; j < len; j++) {
+      const ch = body[j];
+      if (ch === '(') depth++;
+      else if (ch === ')') {
+        depth--;
+        if (depth === 0) {
+          endParen = j;
+          break;
+        }
+      }
+    }
+    if (endParen === -1) {
+      result += body.slice(foundIndex);
+      break;
+    } else {
+      const inside = body.slice(openParenPos + 1, endParen);
+      const prefix = body.slice(foundIndex, openParenPos + 1).trim();
+
+      // เพิ่มเช็คเฉพาะตรงนี้เท่านั้น เพื่อไม่ให้เกิดบรรทัดเปล่าก่อน step แรก
+      if (!isFirstStep) {
+        result += '\n';
+      }
+
+      result += indent + prefix + '\n';
+      const formattedInside = formatInsideKeyframe(inside, indent + indentUnit);
+      result += formattedInside + '\n' + indent + ')';
+
+      isFirstStep = false; // หลังจาก step แรกผ่านไป
+      i = endParen + 1;
+    }
+  }
+
+  // ป้องกันไม่ให้มีบรรทัดเปล่าหลงเหลือท้ายสุด
+  return result.replace(/\n\s*\n/g, '\n');
+}
+
+
+function formatInsideKeyframe(content: string, indent: string): string {
+  const lines = content
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const formatted = lines.map((l) => indent + l);
+  return formatted.join('\n');
+}
+
 // generateGeneric.ts
 function generateGeneric(sourceCode: string): string {
   // ---------------------------------------------------------------------------
@@ -334,7 +420,6 @@ function generateGeneric(sourceCode: string): string {
   // ---------------------------------------------------------------------------
   const lines = templateContent.split('\n');
   const scopeLines: string[] = [];
-  // (REMOVED) const bindLines: string[] = [];
   const constBlocks: string[][] = [];
   const normalLines: string[] = [];
 
@@ -357,9 +442,6 @@ function generateGeneric(sourceCode: string): string {
         i++;
         continue;
       }
-      // (CHANGED) ลบส่วนตรวจ @bind ออก ให้มันไปอยู่ใน normalLines
-      // if (trimmed.startsWith('@bind ')) { ... } => ลบทิ้ง
-
       if (trimmed.startsWith('@const ') || trimmed.startsWith('@keyframe ')) {
         const blockLines: string[] = [];
         blockLines.push(trimmed);
@@ -387,14 +469,6 @@ function generateGeneric(sourceCode: string): string {
   // ---------------------------------------------------------------------------
   // 7) (CHANGED) ไม่สร้าง Type ของ @bind แล้ว => ลบ bindKeys / bindEntries
   // ---------------------------------------------------------------------------
-  // const bindKeys: string[] = [];
-  // for (const bLine of bindLines) {
-  //   const tokens = bLine.split(/\s+/);
-  //   if (tokens.length > 1) {
-  //     bindKeys.push(tokens[1]);
-  //   }
-  // }
-  // const bindEntries = bindKeys.map((k) => `${k}: []`);
 
   // ---------------------------------------------------------------------------
   // 8) สร้าง entries ของ classMap (เหมือนเดิม)
@@ -405,8 +479,6 @@ function generateGeneric(sourceCode: string): string {
     return `${clsName}: [${arrLiteral}]`;
   });
 
-  // (CHANGED) เดิม allEntries = [...bindEntries, ...classEntries]
-  //           ตอนนี้เหลือเฉพาะ classEntries
   const allEntries = [...classEntries];
   const finalGeneric = `{ ${allEntries.join('; ')} }`;
 
@@ -460,11 +532,7 @@ function generateGeneric(sourceCode: string): string {
   for (const s of scopeLines) {
     finalLines.push(`${indentUnit}${s}`);
   }
-  // (CHANGED) ลบส่วน push bindLines
-  // for (const b of bindLines) {
-  //   finalLines.push(`${indentUnit}${b}`);
-  // }
-  if (scopeLines.length > 0 /* || bindLines.length > 0 */) {
+  if (scopeLines.length > 0) {
     finalLines.push('');
   }
   formattedConstBlocks.forEach((block, idx) => {
@@ -484,8 +552,11 @@ function generateGeneric(sourceCode: string): string {
   // (Pass ที่ 2.1.1) จัดการ format pseudo function หลายบรรทัด
   const finalBlockPseudo = formatPseudoFunctions(finalBlock);
 
+  // (Pass ที่ 2.1.2) จัดการ format keyframe blocks หลายบรรทัด
+  const finalBlockKeyframes = formatKeyframeBlocks(finalBlockPseudo);
+
   // (Pass ที่ 2.2) จัด indent @query
-  const finalBlock2 = unifiedQueryIndent(finalBlockPseudo);
+  const finalBlock2 = unifiedQueryIndent(finalBlockKeyframes);
 
   // (Pass ที่ 2.3) แปลง @query/*__angleN__*/ กลับเป็น '>' N ตัว
   const finalBlock3 = revertAngleMarkerToGt(finalBlock2);
