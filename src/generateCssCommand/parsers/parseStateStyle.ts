@@ -7,6 +7,9 @@ import { detectImportantSuffix } from '../helpers/detectImportantSuffix';
 import { separateStyleAndProperties } from '../helpers/separateStyleAndProperties';
 import { IStyleDefinition } from '../types';
 
+// ADDED for theme.property
+import { globalDefineMap } from '../createCssCtrlCssCommand';
+
 export function parseStateStyle(
   abbrLine: string,
   styleDef: IStyleDefinition,
@@ -101,15 +104,37 @@ export function parseStateStyle(
         continue;
       }
 
+      // -------------------------------------------------------------------
+      // เดิมจะ if (!def) throw ...
+      // แทรก logic check theme.property
+      // -------------------------------------------------------------------
       const def = abbrMap[realAbbr as keyof typeof abbrMap];
       if (!def) {
-        throw new Error(`[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap for state ${funcName}.`);
+        // fallback: check globalDefineMap
+        if (realAbbr in globalDefineMap) {
+          const subKey = val2.trim();
+          if (!globalDefineMap[realAbbr][subKey]) {
+            throw new Error(
+              `[CSS-CTRL-ERR] "${realAbbr}[${subKey}]" not found in theme.property(...) for state ${funcName}.`
+            );
+          }
+          const partialDef = globalDefineMap[realAbbr][subKey];
+          // นำ partialDef.base => ใส่ใน result
+          for (const propKey in partialDef.base) {
+            result[propKey] = partialDef.base[propKey] + (isImportant ? ' !important' : '');
+          }
+          continue;
+        } else {
+          throw new Error(
+            `[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap or theme.property(...) for state ${funcName}.`
+          );
+        }
       }
 
+      // เคสปกติ: abbrMap
       let finalVal = convertCSSVariable(val2);
 
-      const isVar2 = abbr2.startsWith('$');
-      if (isVar2) {
+      if (isVar) {
         styleDef.varStates = styleDef.varStates || {};
         styleDef.varStates[funcName] = styleDef.varStates[funcName] || {};
         styleDef.varStates[funcName][realAbbr] = finalVal;

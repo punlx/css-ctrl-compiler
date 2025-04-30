@@ -7,6 +7,9 @@ import { detectImportantSuffix } from '../helpers/detectImportantSuffix';
 import { separateStyleAndProperties } from '../helpers/separateStyleAndProperties';
 import { IStyleDefinition } from '../types';
 
+// ADDED for theme.property
+import { globalDefineMap } from '../createCssCtrlCssCommand';
+
 export function parsePseudoElementStyle(
   abbrLine: string,
   styleDef: IStyleDefinition,
@@ -43,7 +46,7 @@ export function parsePseudoElementStyle(
       const [abbr2, val2] = separateStyleAndProperties(ex);
       if (!abbr2) continue;
 
-      // ถ้า isQueryBlock && abbr2.startsWith('$') => error
+      // ถ้า isQueryBlock && abbr2.startsWith('$') => throw
       if (isQueryBlock && abbr2.startsWith('$')) {
         throw new Error(
           `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${ex}"`
@@ -106,13 +109,39 @@ export function parsePseudoElementStyle(
         continue;
       }
 
+      // ---------------------------------------------------------
+      // ก่อนแก้ไข โค้ดเดิมมีแค่:
+      //   const def = abbrMap[realAbbr as keyof typeof abbrMap];
+      //   if (!def) { throw error }
+      //   ...
+      // แก้เพิ่ม fallback ไปหา theme.property
+      // ---------------------------------------------------------
       const def = abbrMap[realAbbr as keyof typeof abbrMap];
       if (!def) {
-        throw new Error(
-          `[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap for pseudo-element ${pseudoName}.`
-        );
+        // ADDED for theme.property fallback
+        if (realAbbr in globalDefineMap) {
+          const subKey = val2.trim();
+          if (!globalDefineMap[realAbbr][subKey]) {
+            throw new Error(
+              `[CSS-CTRL-ERR] "${realAbbr}[${subKey}]" not found in theme.property(...) for pseudo ${pseudoName}.`
+            );
+          }
+          const partialDef = globalDefineMap[realAbbr][subKey];
+          // เอาเฉพาะ partialDef.base => ใส่ใน pseudo
+          for (const propKey in partialDef.base) {
+            result[propKey] = partialDef.base[propKey] + (isImportant ? ' !important' : '');
+          }
+          continue;
+        } else {
+          throw new Error(
+            `[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap or theme.property(...) for pseudo-element ${pseudoName}.`
+          );
+        }
       }
 
+      // ---------------------------------------------------------
+      // เคสปกติ: เจอใน abbrMap
+      // ---------------------------------------------------------
       const finalVal = convertCSSVariable(val2);
 
       if (isVariable) {
@@ -124,8 +153,7 @@ export function parsePseudoElementStyle(
               `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
           }
         } else {
-          result[def] =
-            `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
+          result[def] = `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
         }
       } else if (val2.includes('--&')) {
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {

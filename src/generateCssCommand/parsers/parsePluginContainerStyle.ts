@@ -9,20 +9,12 @@ import { globalTypographyDict } from '../../extension';
 import { pluginContainerConfig } from '../constants/pluginContainerConfig';
 import { createEmptyStyleDef } from '../helpers/createEmptyStyleDef';
 
+// ADDED for theme.property
+import { globalDefineMap } from '../createCssCtrlCssCommand';
+
 /**
  * parsePluginContainerStyle
  * ใช้ parse syntax เช่น "drawer-container($bg[red] ty[title])"
- * แล้วเก็บผลลง styleDef.pluginContainers[].props
- * ถ้าเจอ $var => ถ้า isQueryBlock => throw error
- * ถ้าเจอ --&var => เก็บให้ transformLocalVariables ทีหลัง
- * ถ้าเจอ ty[...] => ดึงจาก globalTypographyDict
- * ฯลฯ
- *
- * @param abbrLine เช่น "drawer-container(bg[red])" หรือ "dialog-container($color[blue])"
- * @param styleDef
- * @param isConstContext
- * @param isQueryBlock
- * @param keyframeNameMap
  */
 export function parsePluginContainerStyle(
   abbrLine: string,
@@ -74,12 +66,12 @@ export function parsePluginContainerStyle(
     styleDef.varContainers[containerClass] = {};
   }
 
-  // ถ้าไม่มีเนื้อในวงเล็บ => จบ (แปลว่าไม่มี property)
+  // ถ้าไม่มีเนื้อในวงเล็บ => จบ
   if (!bracketContent) {
     return;
   }
 
-  // split token ด้วยช่องว่าง แต่ระวังการตัด [ ... ]
+  // split token ด้วยช่องว่าง
   const tokens = bracketContent.split(/ (?=[^\[\]]*(?:\[|$))/);
 
   for (const tk of tokens) {
@@ -114,19 +106,19 @@ export function parsePluginContainerStyle(
         const [subAbbr, subVal] = separateStyleAndProperties(subNoBang);
         if (!subAbbr) continue;
 
-        const def = abbrMap[subAbbr as keyof typeof abbrMap];
-        if (!def) {
+        const cProp = abbrMap[subAbbr as keyof typeof abbrMap];
+        if (!cProp) {
           throw new Error(
             `[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap (pluginContainer ty[${typKey}])`
           );
         }
         const finalVal = convertCSSVariable(subVal) + (subImp ? ' !important' : '');
-        if (Array.isArray(def)) {
-          for (const propName of def) {
+        if (Array.isArray(cProp)) {
+          for (const propName of cProp) {
             pcObj.props[propName] = finalVal;
           }
         } else {
-          pcObj.props[def] = finalVal;
+          pcObj.props[cProp] = finalVal;
         }
       }
       continue;
@@ -134,7 +126,6 @@ export function parsePluginContainerStyle(
 
     // (NEW) plain local var => "--xxx"
     if (abbr.startsWith('--') && !abbr.startsWith('--&')) {
-      // e.g. --color[red]
       const rawName = abbr.slice(2);
       if (!rawName) {
         throw new Error(`[CSS-CTRL-ERR] Missing local var name after "--". Found: "${abbrLine}"`);
@@ -153,7 +144,6 @@ export function parsePluginContainerStyle(
     if (abbr.startsWith('$')) {
       isVar = true;
       realAbbr = abbr.slice(1);
-      // ถ้า realAbbr === 'ty' => error (ห้าม $ty)
       if (realAbbr === 'ty') {
         throw new Error(
           `[CSS-CTRL-ERR] "$ty[...]": cannot use runtime variable to reference typography.`
@@ -164,12 +154,29 @@ export function parsePluginContainerStyle(
     // lookup ใน abbrMap
     const def = abbrMap[realAbbr as keyof typeof abbrMap];
     if (!def) {
-      throw new Error(`[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap (pluginContainer).`);
+      // ADDED for theme.property fallback
+      if (realAbbr in globalDefineMap) {
+        const subKey = val.trim();
+        if (!globalDefineMap[realAbbr][subKey]) {
+          throw new Error(
+            `[CSS-CTRL-ERR] "${realAbbr}[${subKey}]" not found in theme.property(...) (pluginContainer).`
+          );
+        }
+        const partialDef = globalDefineMap[realAbbr][subKey];
+        // นำ partialDef.base => ใส่ใน pcObj.props
+        for (const k in partialDef.base) {
+          pcObj.props[k] = partialDef.base[k] + (isImportant ? ' !important' : '');
+        }
+        continue;
+      } else {
+        throw new Error(
+          `[CSS-CTRL-ERR] "${realAbbr}" not found in abbrMap (pluginContainer).`
+        );
+      }
     }
 
     let finalVal = convertCSSVariable(val) + (isImportant ? ' !important' : '');
 
-    // ถ้าพบ --&xxx ใน val => local var usage
     if (val.includes('--&')) {
       finalVal = val.replace(/--&([\w-]+)/g, (_, varName) => {
         return `LOCALVAR(${varName})`;
@@ -179,9 +186,7 @@ export function parsePluginContainerStyle(
 
     if (isVar) {
       // เช่น $bg[red]
-      // เก็บใน varContainers[containerClass][realAbbr] = <rawValue>
       styleDef.varContainers[containerClass][realAbbr] = convertCSSVariable(val);
-      // แล้วใส่ prop => var(--xxx-containerClass)
       const varRef = `var(--${realAbbr}-${containerClass})` + (isImportant ? ' !important' : '');
       if (Array.isArray(def)) {
         for (const propName of def) {
@@ -191,7 +196,6 @@ export function parsePluginContainerStyle(
         pcObj.props[def] = varRef;
       }
     } else {
-      // เคสปกติ (ไม่ใช่ $var)
       if (Array.isArray(def)) {
         for (const propName of def) {
           pcObj.props[propName] = finalVal;

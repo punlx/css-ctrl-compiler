@@ -7,6 +7,9 @@ import { detectImportantSuffix } from '../helpers/detectImportantSuffix';
 import { separateStyleAndProperties } from '../helpers/separateStyleAndProperties';
 import { IStyleDefinition } from '../types';
 
+// ADDED for theme.property
+import { globalDefineMap } from '../createCssCtrlCssCommand';
+
 export function parseScreenStyle(
   abbrLine: string,
   styleDef: IStyleDefinition,
@@ -128,8 +131,24 @@ export function parseScreenStyle(
 
       const def = abbrMap[abbr2 as keyof typeof abbrMap];
       if (!def) {
-        throw new Error(`[CSS-CTRL-ERR] "${abbr2}" not found in abbrMap (screen).`);
+        // ADDED for theme.property fallback
+        if (abbr2 in globalDefineMap) {
+          const subKey = val2.trim();
+          if (!globalDefineMap[abbr2][subKey]) {
+            throw new Error(
+              `[CSS-CTRL-ERR] "${abbr2}[${subKey}]" not found in theme.property(...) (screen).`
+            );
+          }
+          const partialDef = globalDefineMap[abbr2][subKey];
+          for (const propName in partialDef.base) {
+            screenProps[propName] = partialDef.base[propName] + (isImportant ? ' !important' : '');
+          }
+          continue;
+        } else {
+          throw new Error(`[CSS-CTRL-ERR] "${abbr2}" not found in abbrMap (screen).`);
+        }
       }
+
       let finalVal = convertCSSVariable(val2);
 
       if (val2.includes('--&')) {

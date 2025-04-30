@@ -7,13 +7,12 @@ import { detectImportantSuffix } from '../helpers/detectImportantSuffix';
 import { separateStyleAndProperties } from '../helpers/separateStyleAndProperties';
 import { globalTypographyDict } from '../../extension';
 
+// ADDED for theme.property
+import { globalDefineMap } from '../createCssCtrlCssCommand';
+
 /**
- * parsePluginStateStyle - parse abbreviation ที่เป็น "<pluginPrefix>-<suffix>( ... )"
- * เช่น "option-active(bg[red] $p[10px] c[--&color])", "accordion-disabled(...)"
- * - ถ้าเจอ "$var" => ใส่ styleDef.varStates["option-active"][varName]
- * - ถ้าเจอ "--&xxx" => แทนเป็น "LOCALVAR(xxx)" แล้วค่อยให้ transformLocalVariables(...) ทำงาน
- * - ถ้ามีทั้ง "$var" และ "--&xxx" ใน property เดียวกัน => throw error
- * - เก็บ prop ปกติใน pluginStates[stateName].props => buildCssText => .app_box.listboxPlugin-active { ... }
+ * parsePluginStateStyle
+ * ใช้ parse syntax เช่น "option-active(bg[red] $p[10px] c[--&color])", ...
  */
 export function parsePluginStateStyle(
   abbrLine: string,
@@ -100,10 +99,10 @@ export function parsePluginStateStyle(
         const def2 = abbrMap[subAbbr as keyof typeof abbrMap];
         if (!def2) {
           throw new Error(
-            `[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap (ty[${typKey}]) (pluginState).`
+            `[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap (pluginState ty[${typKey}])`
           );
         }
-        let finalVal2 = subVal + (subImp ? ' !important' : '');
+        const finalVal2 = subVal + (subImp ? ' !important' : '');
         if (Array.isArray(def2)) {
           for (const prop2 of def2) {
             resultProps[prop2] = finalVal2;
@@ -115,18 +114,15 @@ export function parsePluginStateStyle(
       continue;
     }
 
-    // เช็คว่ามีทั้ง $... และ --&... ใน val ไหม => ถ้ามีก็ throw
-    // เช่น "$c[--&color]" => abbr="$c", val="--&color"
-    // แต่บางกรณีอาจเป็น abbr="c", val="$bg --&color"
-    // => ควรเช็คทั้ง abbr + val รึเปล่า? เอาเป็นเช็คใน val ตรงๆ ถ้ามี $ และ --& พร้อมกัน => throw
+    // เช็คว่ามีทั้ง $... และ --&... ใน val ไหม => ถ้าเจอ => throw
     if (
       (abbr.startsWith('$') || abbr.includes('--&')) &&
       val.includes('--&') &&
       val.includes('$')
     ) {
-      // แต่อาจไม่ตรงตาม DSL หรือ parsing
-      // ง่ายสุด: ถ้า abbr.startsWith('$') และ val.includes('--&') => throw
-      throw new Error(`[CSS-CTRL-ERR] Cannot mix $var and --&var in one property. Found: "${tk}"`);
+      throw new Error(
+        `[CSS-CTRL-ERR] Cannot mix $var and --&var in one property. Found: "${tk}"`
+      );
     }
 
     let isVar = false;
@@ -139,7 +135,6 @@ export function parsePluginStateStyle(
     if (isVar) {
       // ex. "$bg[red]"
       if (val.includes('--&')) {
-        // ถ้าต้องการให้เจอใน val => throw
         throw new Error(
           `[CSS-CTRL-ERR] Cannot mix $var and --&var in one property. Found: "${tk}"`
         );
@@ -150,10 +145,31 @@ export function parsePluginStateStyle(
         if (!abbr2) continue;
         const def2 = abbrMap[abbr2 as keyof typeof abbrMap];
         if (!def2) {
-          throw new Error(`[CSS-CTRL] pluginState: "$${abbr2}" not found in abbrMap.`);
+          // ADDED for theme.property fallback
+          if (abbr2 in globalDefineMap) {
+            const subKey = val2.trim();
+            if (!globalDefineMap[abbr2][subKey]) {
+              throw new Error(
+                `[CSS-CTRL-ERR] "${abbr2}[${subKey}]" not found in theme.property(...) (pluginState).`
+              );
+            }
+            // แต่ในที่นี้ ถ้าเป็น $var => ไม่ค่อยสมเหตุสมผลที่จะ merge property
+            // ถ้าจะรองรับจริง ๆ ก็ทำคล้ายกัน: merge partialDef.base
+            // หรือ throw error ถ้าไม่อยากรองรับ
+            // สมมุติเรารองรับแบบเดียวกับ base:
+            const partialDef = globalDefineMap[abbr2][subKey];
+            for (const k in partialDef.base) {
+              resultProps[k] = partialDef.base[k] + (isImportant ? ' !important' : '');
+            }
+            continue;
+          } else {
+            throw new Error(`[CSS-CTRL] pluginState: "$${abbr2}" not found in abbrMap.`);
+          }
         }
+
         const finalVal = val2 + (isImportant ? ' !important' : '');
-        styleDef.varStates[stateName][abbr2] = finalVal;
+        styleDef.varStates[stateName][abbr2] = finalVal; // $var => varStates
+
         if (Array.isArray(def2)) {
           for (const propName of def2) {
             resultProps[propName] = `var(--${abbr2}-${stateName})`;
@@ -172,17 +188,31 @@ export function parsePluginStateStyle(
       if (!abbr2) continue;
       const def2 = abbrMap[abbr2 as keyof typeof abbrMap];
       if (!def2) {
-        throw new Error(`[CSS-CTRL] pluginState: abbr "${abbr2}" not found in abbrMap.`);
+        // ADDED for theme.property fallback
+        if (abbr2 in globalDefineMap) {
+          const subKey = val2Raw.trim();
+          if (!globalDefineMap[abbr2][subKey]) {
+            throw new Error(
+              `[CSS-CTRL-ERR] "${abbr2}[${subKey}]" not found in theme.property(...) (pluginState).`
+            );
+          }
+          const partialDef = globalDefineMap[abbr2][subKey];
+          for (const k in partialDef.base) {
+            resultProps[k] = partialDef.base[k] + (isImportant ? ' !important' : '');
+          }
+          continue;
+        } else {
+          throw new Error(`[CSS-CTRL] pluginState: abbr "${abbr2}" not found in abbrMap.`);
+        }
       }
 
-      // เช็คถ้า val2Raw มี $... และ --&...
-      if (val2Raw.includes('$') && val2Raw.includes('--&')) {
+      let val2 = val2Raw;
+      if (val2.includes('$') && val2.includes('--&')) {
         throw new Error(
           `[CSS-CTRL-ERR] Cannot mix $var and --&var in one property. Found: "${tk}"`
         );
       }
 
-      let val2 = val2Raw;
       if (val2.includes('--&')) {
         val2 = val2.replace(/--&([\w-]+)/g, (_, vName) => `LOCALVAR(${vName})`);
       }

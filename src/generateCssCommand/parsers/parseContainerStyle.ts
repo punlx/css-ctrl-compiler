@@ -7,6 +7,9 @@ import { detectImportantSuffix } from '../helpers/detectImportantSuffix';
 import { separateStyleAndProperties } from '../helpers/separateStyleAndProperties';
 import { IStyleDefinition } from '../types';
 
+// ADDED for theme.property
+import { globalDefineMap } from '../createCssCtrlCssCommand';
+
 export function parseContainerStyle(
   abbrLine: string,
   styleDef: IStyleDefinition,
@@ -63,6 +66,7 @@ export function parseContainerStyle(
 
     const [abbr, val] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
+
     const isVar = abbr.startsWith('$');
 
     if (isQueryBlock && isVar) {
@@ -99,14 +103,14 @@ export function parseContainerStyle(
               `[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap (container). (ty[${typKey}])`
             );
           }
-          let finalVal = convertCSSVariable(subVal);
-          finalVal += tkImp ? ' !important' : '';
+          let finalVal2 = convertCSSVariable(subVal);
+          finalVal2 += tkImp ? ' !important' : '';
           if (Array.isArray(cProp2)) {
             for (const pr of cProp2) {
-              containerProps[pr] = finalVal;
+              containerProps[pr] = finalVal2;
             }
           } else {
-            containerProps[cProp2] = finalVal;
+            containerProps[cProp2] = finalVal2;
           }
         }
         continue;
@@ -127,7 +131,22 @@ export function parseContainerStyle(
 
       const def = abbrMap[abbr2 as keyof typeof abbrMap];
       if (!def) {
-        throw new Error(`[CSS-CTRL-ERR] "${abbr2}" not found in abbrMap (container).`);
+        // ADDED for theme.property fallback
+        if (abbr2 in globalDefineMap) {
+          const subKey = val2.trim();
+          if (!globalDefineMap[abbr2][subKey]) {
+            throw new Error(
+              `[CSS-CTRL-ERR] "${abbr2}[${subKey}]" not found in theme.property(...) (container).`
+            );
+          }
+          const partialDef = globalDefineMap[abbr2][subKey];
+          for (const propName in partialDef.base) {
+            containerProps[propName] = partialDef.base[propName] + (isImportant ? ' !important' : '');
+          }
+          continue;
+        } else {
+          throw new Error(`[CSS-CTRL-ERR] "${abbr2}" not found in abbrMap (container).`);
+        }
       }
 
       let finalVal = convertCSSVariable(val2);
