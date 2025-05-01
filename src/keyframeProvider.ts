@@ -58,7 +58,6 @@ export function createKeyframeProvider(keyframeDict: Record<string, string>) {
         for (const keyframeName of combinedKeyframeNames) {
           // ถ้ามีใน localKeyframeDict ให้ใช้ DSL ของ local ก่อน (หรือจะเปลี่ยน logic ได้ตามต้องการ)
           const rawDSL = localKeyframeDict[keyframeName] || keyframeDict[keyframeName];
-
           if (!rawDSL) {
             continue;
           }
@@ -66,9 +65,17 @@ export function createKeyframeProvider(keyframeDict: Record<string, string>) {
           // parse DSL => multi-line CSS
           const docString = buildKeyframeDoc(rawDSL);
 
-          const item = new vscode.CompletionItem(keyframeName, vscode.CompletionItemKind.Value);
-          item.detail = keyframeName;
+          // ตรวจว่าเป็นของ theme หรือไม่
+          const isTheme = keyframeDict.hasOwnProperty(keyframeName);
+
+          // ถ้า isTheme => แสดง label = "keyframeName (theme)"
+          // ถ้าไม่ => แสดง label = "keyframeName"
+          const label = isTheme ? `${keyframeName} (theme)` : keyframeName;
+
+          const item = new vscode.CompletionItem(label, vscode.CompletionItemKind.Value);
+          item.detail = keyframeName; // detail อาจเป็นแค่ชื่อสั้น ๆ
           item.documentation = docString;
+          // ตอน user เลือก จะ insert "keyframeName" ธรรมดา
           item.insertText = keyframeName;
 
           completions.push(item);

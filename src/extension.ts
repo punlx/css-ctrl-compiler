@@ -57,6 +57,9 @@ import {
   updateThemePropertyDecorations,
 } from './ghostThemePropertyDecorations';
 
+/* ------------------ (NEW) import ghostKeyframeDecorations ------------------ */
+import { initThemeKeyframeNames, updateKeyframeDecorations } from './ghostKeyframeDecorations';
+
 export let globalBreakpointDict: Record<string, string> = {};
 export let globalTypographyDict: Record<string, string> = {};
 
@@ -103,7 +106,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const colorProvider = createColorProvider(paletteColors);
   const breakpointProvider = createBreakpointProvider(screenDict);
   const typographyProvider = createFontProvider(typographyDict);
-  const keyframeProvider = createKeyframeProvider(keyframeDict);
+  const keyframeProviderDisposable = createKeyframeProvider(keyframeDict);
   const spacingProvider = createSpacingProvider(spacingDict);
   const directiveProvider = createDirectiveProvider();
   const bindClassProvider = createBindClassProvider();
@@ -128,7 +131,7 @@ export async function activate(context: vscode.ExtensionContext) {
     colorProvider,
     breakpointProvider,
     typographyProvider,
-    keyframeProvider,
+    keyframeProviderDisposable,
     spacingProvider,
     directiveProvider,
     bindClassProvider,
@@ -149,6 +152,9 @@ export async function activate(context: vscode.ExtensionContext) {
   /* (NEW) เรียก initThemePropertyMap เพื่อเตรียม dict defineMap ไว้ใช้กับ ghost theme property */
   initThemePropertyMap(defineMap);
 
+  /* (NEW) เรียก initThemeKeyframeNames เพื่อส่งชื่อ keyframe เข้าไปเก็บใช้กับ ghostKeyframeDecorations */
+  initThemeKeyframeNames(Object.keys(keyframeDict));
+
   // อัปเดต ghost text ต่าง ๆ
   if (vscode.window.activeTextEditor) {
     updateDecorations(vscode.window.activeTextEditor);
@@ -159,6 +165,8 @@ export async function activate(context: vscode.ExtensionContext) {
     updateBindDecorations(vscode.window.activeTextEditor);
     /* (NEW) updateThemePropertyDecorations */
     updateThemePropertyDecorations(vscode.window.activeTextEditor);
+    /* (NEW) updateKeyframeDecorations */
+    updateKeyframeDecorations(vscode.window.activeTextEditor);
   }
 
   const changeEditorDisposable = vscode.window.onDidChangeActiveTextEditor((editor) => {
@@ -168,8 +176,9 @@ export async function activate(context: vscode.ExtensionContext) {
       updateImportantDecorations(editor);
       updateQueryDecorations(editor);
       updateBindDecorations(editor);
-      /* (NEW) updateThemePropertyDecorations */
       updateThemePropertyDecorations(editor);
+      /* (NEW) updateKeyframeDecorations */
+      updateKeyframeDecorations(editor);
     }
   });
   context.subscriptions.push(changeEditorDisposable);
@@ -182,8 +191,9 @@ export async function activate(context: vscode.ExtensionContext) {
       updateImportantDecorations(editor);
       updateQueryDecorations(editor);
       updateBindDecorations(editor);
-      /* (NEW) updateThemePropertyDecorations */
       updateThemePropertyDecorations(editor);
+      /* (NEW) updateKeyframeDecorations */
+      updateKeyframeDecorations(editor);
     }
   });
   context.subscriptions.push(changeDocDisposable);
