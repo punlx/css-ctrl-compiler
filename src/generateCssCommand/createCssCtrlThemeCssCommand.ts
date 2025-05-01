@@ -35,7 +35,11 @@ function parseKeyframeAbbr(
   abbrBody: string,
   keyframeName: string,
   blockLabel: string
-): { cssText: string; varMap: Record<string, string>; defaultVars: Record<string, string> } {
+): {
+  cssText: string;
+  varMap: Record<string, string>;
+  defaultVars: Record<string, string>;
+} {
   const regex = /([\w\-\$]+)\[(.*?)\]/g;
   let match: RegExpExecArray | null;
 
@@ -47,6 +51,7 @@ function parseKeyframeAbbr(
     let styleAbbr = match[1];
     let propVal = match[2];
 
+    // ถ้ามี --xxx อยู่ในค่า propVal ก็ transform เป็น var(--xxx)
     if (propVal.includes('--')) {
       propVal = propVal.replace(/(--[\w-]+)/g, 'var($1)');
     }
@@ -57,11 +62,12 @@ function parseKeyframeAbbr(
       styleAbbr = styleAbbr.slice(1);
       if (styleAbbr === 'ty') {
         throw new Error(
-          `[CSS-CTRL-ERR] "$ty[...]": cannot use runtime variable to reference typography.`
+          `[CSS-CTRL-ERR] "$ty[...]": cannot use runtime variable to reference typography in keyframe.`
         );
       }
     }
 
+    // lookup abbrMap => ถ้าไม่เจอ => ถือว่าเป็น property ตรง ๆ
     const finalProp = abbrMap[styleAbbr as keyof typeof abbrMap] || styleAbbr;
 
     if (isVar) {
@@ -77,6 +83,11 @@ function parseKeyframeAbbr(
   return { cssText, varMap, defaultVars };
 }
 
+/**
+ * (MODIFIED) parseKeyframeString
+ *  - เดิมใช้ regex /(\b(?:\d+%|from|to))\(([^)]*)\)/g เพื่อจับ from(...) / 50%(...) / to(...)
+ *  - เปลี่ยนมาใช้ฟังก์ชัน mergeKeyframeBlocksForTheme(...) เพื่อรองรับ multiline DSL
+ */
 function parseKeyframeString(keyframeName: string, rawStr: string): string {
   // ตรวจจับการใช้ $ หรือ --& ภายใน theme.keyframe
   if (rawStr.includes('$')) {
@@ -90,24 +101,26 @@ function parseKeyframeString(keyframeName: string, rawStr: string): string {
     );
   }
 
-  const regex = /(\b(?:\d+%|from|to))\(([^)]*)\)/g;
-  let match: RegExpExecArray | null;
+  // รวมเป็น blocks โดยดู from(...) / to(...) / 50%(...) แบบ multiline
+  const blocksParsed = mergeKeyframeBlocksForTheme(rawStr);
+
   const blocks: Array<{ label: string; css: string }> = [];
   const defaultVarMap: Record<string, string> = {};
 
-  while ((match = regex.exec(rawStr)) !== null) {
-    const label = match[1];
-    const abbrBody = match[2];
-
+  for (const b of blocksParsed) {
+    // b.label => "from" / "to" / "50%"
+    // b.body => DSL ภายในวงเล็บ
     const { cssText, varMap, defaultVars } = parseKeyframeAbbr(
-      abbrBody.trim(),
+      b.body.trim(),
       keyframeName,
-      label
+      b.label
     );
-    blocks.push({ label, css: cssText });
+
+    blocks.push({ label: b.label, css: cssText });
     Object.assign(defaultVarMap, defaultVars);
   }
 
+  // รวม rootVar ถ้ามี
   let rootVarsBlock = '';
   for (const varName in defaultVarMap) {
     rootVarsBlock += `${varName}:${defaultVarMap[varName]};`;
@@ -127,6 +140,77 @@ function parseKeyframeString(keyframeName: string, rawStr: string): string {
   return finalCss;
 }
 
+/**
+ * (NEW) mergeKeyframeBlocksForTheme:
+ *  - รองรับการเขียน from(...) / to(...) / 50%(...) หลายบรรทัด
+ *  - ค้นเจอ label => from/to/xx% => แล้วรวบรวม text ภายใน ( ... ) ด้วยการนับวงเล็บ
+ */
+function mergeKeyframeBlocksForTheme(
+  rawStr: string
+): Array<{ label: string; body: string }> {
+  const result: Array<{ label: string; body: string }> = [];
+
+  // แปลงเป็น list ของ token (line) คร่าว ๆ เพื่อรวมกัน
+  const lines = rawStr.split('\n');
+  let combined = lines
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join(' ');
+
+  // เราจะสแกนหา pattern: (from|to|\d+%)(
+  // แล้วอ่านต่อไปจนกว่าจะปิดวงเล็บครบ
+  let i = 0;
+  while (i < combined.length) {
+    // หา label
+    const labelMatch = /^(?:from|to|\d+%)/i.exec(combined.slice(i));
+    if (!labelMatch) {
+      // ถ้าไม่ match => ข้าม 1 char
+      i++;
+      continue;
+    }
+
+    // ตำแหน่ง label เริ่ม
+    const labelStart = i + labelMatch.index!;
+    const labelStr = labelMatch[0].toLowerCase();
+    i = labelStart + labelStr.length;
+
+    // ข้าม whitespace
+    while (i < combined.length && /\s/.test(combined[i])) {
+      i++;
+    }
+
+    // ต้องเจอ '('
+    if (combined[i] !== '(') {
+      throw new Error(
+        `[CSS-CTRL-ERR] Keyframe DSL parse error: missing '(' after "${labelStr}".`
+      );
+    }
+    // เริ่มเก็บ body
+    let nested = 1;
+    let j = i + 1;
+    for (; j < combined.length; j++) {
+      if (combined[j] === '(') nested++;
+      else if (combined[j] === ')') nested--;
+      if (nested === 0) {
+        break;
+      }
+    }
+    if (nested !== 0) {
+      throw new Error(
+        `[CSS-CTRL-ERR] Keyframe DSL parse error: missing closing ')' for "${labelStr}".`
+      );
+    }
+
+    const bodyContent = combined.slice(i + 1, j); // ระหว่าง ( ...)
+    i = j + 1;
+
+    // เก็บผล
+    result.push({ label: labelStr, body: bodyContent });
+  }
+
+  return result;
+}
+
 function generateVariableCSS(variableMap: Record<string, string>): string {
   let rootBlock = '';
   for (const key in variableMap) {
@@ -135,7 +219,6 @@ function generateVariableCSS(variableMap: Record<string, string>): string {
   return rootBlock ? `:root{${rootBlock}}` : '';
 }
 
-// ---------------------------------------------------------------
 interface IParseResult {
   palette: string[][] | null;
   variable: Record<string, string>;
@@ -144,6 +227,10 @@ interface IParseResult {
   classMap?: Record<string, string>;
 }
 
+/**
+ * parseCssCtrlThemeSource
+ *  - ดึงข้อมูลจาก theme.palette([...]), theme.variable({...}), theme.keyframe({...}), และ theme.class({...})
+ */
 function parseCssCtrlThemeSource(sourceText: string): IParseResult {
   const result: IParseResult = {
     palette: null,
@@ -152,6 +239,7 @@ function parseCssCtrlThemeSource(sourceText: string): IParseResult {
     classMap: {},
   };
 
+  // ---------------- parse palette(...) ----------------
   const paletteRegex = /theme\.palette\s*\(\s*\[([\s\S]*?)\]\s*\)/;
   const paletteMatch = paletteRegex.exec(sourceText);
   if (paletteMatch) {
@@ -170,6 +258,7 @@ function parseCssCtrlThemeSource(sourceText: string): IParseResult {
     }
   }
 
+  // ---------------- parse variable({...}) ----------------
   const varRegex = /theme\.variable\s*\(\s*\{\s*([\s\S]*?)\}\s*\)/;
   const varMatch = varRegex.exec(sourceText);
   if (varMatch) {
@@ -183,6 +272,7 @@ function parseCssCtrlThemeSource(sourceText: string): IParseResult {
     }
   }
 
+  // ---------------- parse keyframe({...}) ----------------
   const keyframeRegex = /theme\.keyframe\s*\(\s*\{\s*([\s\S]*?)\}\s*\)/;
   const keyframeMatch = keyframeRegex.exec(sourceText);
   if (keyframeMatch) {
@@ -199,7 +289,7 @@ function parseCssCtrlThemeSource(sourceText: string): IParseResult {
     }
   }
 
-  // (NEW) parse theme.class(...)
+  // ---------------- parse class({...}) ----------------
   const classRegex = /theme\.class\s*\(\s*\{\s*([\s\S]*?)\}\s*\)/m;
   const classMatch = classRegex.exec(sourceText);
   if (classMatch) {
@@ -222,6 +312,12 @@ function parseCssCtrlThemeSource(sourceText: string): IParseResult {
   return result;
 }
 
+/**
+ * generateCssCtrlThemeCssFromSource
+ *  - เรียก parseCssCtrlThemeSource
+ *  - สร้าง CSS ของ palette, variable, keyframe
+ *  - (NEW) สร้าง CSS ของ class(...) ด้วย parse DSL
+ */
 function generateCssCtrlThemeCssFromSource(sourceText: string): string {
   const parsed = parseCssCtrlThemeSource(sourceText);
 
@@ -244,7 +340,10 @@ function generateCssCtrlThemeCssFromSource(sourceText: string): string {
   return css;
 }
 
-// (NEW) generateThemeClassCSS: parse DSL -> build IStyleDefinition -> buildCssText(scope=none)
+/**
+ * (NEW) generateThemeClassCSS
+ *  - parse DSL -> build IStyleDefinition -> buildCssText(scope=none)
+ */
 function generateThemeClassCSS(classMap: Record<string, string>): string {
   let outCss = '';
   for (const className in classMap) {
@@ -252,7 +351,7 @@ function generateThemeClassCSS(classMap: Record<string, string>): string {
     // สร้าง IStyleDefinition
     const styleDef = createEmptyStyleDef();
 
-    // แบ่ง token ตาม regex เคยใช้
+    // แยก token ตามที่ parseSingleAbbr เคยใช้
     const tokens = dslStr.split(/ (?=[^\[\]]*(?:\[|$))/);
     for (const tk of tokens) {
       parseSingleAbbr(tk, styleDef, false, false, false);
@@ -266,9 +365,11 @@ function generateThemeClassCSS(classMap: Record<string, string>): string {
   return outCss;
 }
 
-// ----------------------------------------------------
-// (CHANGED) เพิ่มพารามิเตอร์ diagCollection + สร้าง Diagnostic
-// ----------------------------------------------------
+/**
+ * createCssCtrlThemeCssFile
+ *  - ใช้ generateCssCtrlThemeCssFromSource สร้างไฟล์ .css
+ *  - ใส่ import './xxxx.css'
+ */
 export async function createCssCtrlThemeCssFile(
   doc: vscode.TextDocument,
   diagCollection: vscode.DiagnosticCollection
@@ -277,7 +378,7 @@ export async function createCssCtrlThemeCssFile(
     return;
   }
 
-  // ลบ Diagnostic เก่า (ถ้ามี) ก่อน
+  // ลบ Diagnostic เก่า (ถ้ามี)
   diagCollection.delete(doc.uri);
 
   const fileName = path.basename(doc.fileName);
@@ -310,7 +411,7 @@ export async function createCssCtrlThemeCssFile(
   try {
     generatedCss = generateCssCtrlThemeCssFromSource(finalText.replace(importLine, ''));
   } catch (err: any) {
-    // (ADDED) สร้าง Diagnostic เพื่อให้แสดงใน Problems Panel
+    // แสดง error ใน Problems
     const diag: vscode.Diagnostic = {
       message: err.message,
       severity: vscode.DiagnosticSeverity.Error,
@@ -319,10 +420,8 @@ export async function createCssCtrlThemeCssFile(
     };
     diagCollection.set(doc.uri, [diag]);
 
-    // ยังแสดงเป็น Notification เหมือนเดิม
     vscode.window.showErrorMessage(`CSS-CTRL theme parse error: ${err.message}`);
-
-    throw err; // จะหยุด process ตรงนี้
+    throw err;
   }
 
   const formattedCss = await formatCss(generatedCss);
