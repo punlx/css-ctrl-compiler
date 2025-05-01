@@ -1,4 +1,3 @@
-// src/extension.ts
 import * as vscode from 'vscode';
 import { createScopeSuggestionProvider } from './scopeSuggestionProvider';
 import { createCssCtrlThemeCssFile } from './generateCssCommand/createCssCtrlThemeCssCommand';
@@ -51,6 +50,12 @@ import { createCssCtrlAutoDeleteProvider } from './autoDeleteProvider';
 
 /* ------------------ (NEW) import ghostBindDecorations ------------------ */
 import { updateBindDecorations } from './ghostBindDecorations';
+
+/* ------------------ (NEW) import ghostThemePropertyDecorations ------------------ */
+import {
+  initThemePropertyMap,
+  updateThemePropertyDecorations,
+} from './ghostThemePropertyDecorations';
 
 export let globalBreakpointDict: Record<string, string> = {};
 export let globalTypographyDict: Record<string, string> = {};
@@ -141,21 +146,19 @@ export async function activate(context: vscode.ExtensionContext) {
 
   initSpacingMap(spacingDict);
 
-  // --------------------------------------------------------------------------
-  // (NEW) เรียก registerAutoInsertSpaceWhenGt เพื่อดักพิมพ์ '>'
-  // --------------------------------------------------------------------------
+  /* (NEW) เรียก initThemePropertyMap เพื่อเตรียม dict defineMap ไว้ใช้กับ ghost theme property */
+  initThemePropertyMap(defineMap);
 
   // อัปเดต ghost text ต่าง ๆ
   if (vscode.window.activeTextEditor) {
     updateDecorations(vscode.window.activeTextEditor);
     updateSpacingDecorations(vscode.window.activeTextEditor);
     updateImportantDecorations(vscode.window.activeTextEditor);
-    // (NEW) updateQueryDecorations
     updateQueryDecorations(vscode.window.activeTextEditor);
     registerAutoInsertSpaceWhenGt(context);
-
-    // (NEW) updateBindDecorations
     updateBindDecorations(vscode.window.activeTextEditor);
+    /* (NEW) updateThemePropertyDecorations */
+    updateThemePropertyDecorations(vscode.window.activeTextEditor);
   }
 
   const changeEditorDisposable = vscode.window.onDidChangeActiveTextEditor((editor) => {
@@ -164,8 +167,9 @@ export async function activate(context: vscode.ExtensionContext) {
       updateSpacingDecorations(editor);
       updateImportantDecorations(editor);
       updateQueryDecorations(editor);
-      // (NEW) updateBindDecorations
       updateBindDecorations(editor);
+      /* (NEW) updateThemePropertyDecorations */
+      updateThemePropertyDecorations(editor);
     }
   });
   context.subscriptions.push(changeEditorDisposable);
@@ -177,8 +181,9 @@ export async function activate(context: vscode.ExtensionContext) {
       updateSpacingDecorations(editor);
       updateImportantDecorations(editor);
       updateQueryDecorations(editor);
-      // (NEW) updateBindDecorations
       updateBindDecorations(editor);
+      /* (NEW) updateThemePropertyDecorations */
+      updateThemePropertyDecorations(editor);
     }
   });
   context.subscriptions.push(changeDocDisposable);
@@ -205,18 +210,14 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  // --------------------------------------------------------------------------------
   // สแกนไฟล์ .ctrl.ts ทั้งหมด -> validateCssCtrlDoc
-  // --------------------------------------------------------------------------------
   const ctrlUris = await vscode.workspace.findFiles('**/*.ctrl.ts', '**/node_modules/**');
   for (const uri of ctrlUris) {
     const doc = await vscode.workspace.openTextDocument(uri);
     validateCssCtrlDoc(doc, cssCtrlDiagnosticCollection);
   }
 
-  // --------------------------------------------------------------------------------
-  // เมื่อ save ไฟล์ .ctrl.ts => validate ใหม่ ถ้าไม่ error => generate
-  // --------------------------------------------------------------------------------
+  // เมื่อ save ไฟล์ .ctrl.ts => validate + generate
   const willSaveDisposable = vscode.workspace.onWillSaveTextDocument((e) => {
     const savedDoc = e.document;
     const activeEditor = vscode.window.activeTextEditor;
@@ -268,9 +269,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
   context.subscriptions.push(combinedCommand);
 
-  // --------------------------------------------------------------------------------
-  // (NEW) เมื่อ save ไฟล์ ctrl.theme.ts => generate ctrl.theme.css
-  // --------------------------------------------------------------------------------
+  // เมื่อ save ไฟล์ ctrl.theme.ts => generate ctrl.theme.css
   const themeWillSaveDisposable = vscode.workspace.onWillSaveTextDocument((e) => {
     const savedDoc = e.document;
     const activeEditor = vscode.window.activeTextEditor;
@@ -282,22 +281,16 @@ export async function activate(context: vscode.ExtensionContext) {
     if (savedDoc.fileName.endsWith('ctrl.theme.ts')) {
       e.waitUntil(
         (async () => {
-          // (1) เรียกสร้างไฟล์ ctrl.theme.css พร้อมตรวจ error (Diagnostic) ภายใน
           try {
             await createCssCtrlThemeCssFile(savedDoc, cssCtrlDiagnosticCollection);
           } catch (error) {
-            // ถ้า error เกิด ในฟังก์ชัน createCssCtrlThemeCssFile เอง
-            // ได้สร้าง diagnostic + showErrorMessage ไปแล้ว จึงไม่ต้องทำอะไรเพิ่ม
             return;
           }
-          // (2) ตรวจดูว่ามี error ใน diagnostic อีกไหม
           const diags = cssCtrlDiagnosticCollection.get(savedDoc.uri);
           const hasErr = diags && diags.some((d) => d.severity === vscode.DiagnosticSeverity.Error);
           if (hasErr) {
             return;
           }
-          // (3) ถ้าไม่มี error สามารถทำอย่างอื่นต่อได้ตามต้องการ
-          // เช่น vscode.commands.executeCommand('ctrl.generateGeneric');
         })()
       );
     }

@@ -49,7 +49,11 @@ export function createDefineTopKeyProvider(defineMap: Record<string, string[]>) 
 
         // 5) สร้าง CompletionItems
         const completions: vscode.CompletionItem[] = matchedKeys.map((k) => {
-          const item = new vscode.CompletionItem(k, vscode.CompletionItemKind.Constructor);
+          const item = new vscode.CompletionItem(
+            `${k} (theme)`,
+            vscode.CompletionItemKind.Constructor
+          );
+          item.insertText = k;
           // เวลาเลือก -> แทน prefix ด้วย k
           // => range we might specify or let VSCode do auto
           item.detail = `(theme.property) ${k}`;
