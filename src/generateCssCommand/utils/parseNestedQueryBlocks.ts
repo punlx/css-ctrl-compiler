@@ -3,7 +3,13 @@
 import { INestedQueryNode } from '../types';
 import { pluginStatesConfig } from '../constants/pluginStatesConfig';
 
-function transformAngleBracketsToQuery(body: string): string {
+/**
+ * ฟังก์ชันเดิม transformAngleBracketsToQuery (ใช้สำหรับ '>') ถูกปรับปรุงให้รวมการแทนที่ '<' => '@parent'
+ * โดย:
+ *   - เจอ '>' ระดับ top-level => แทนเป็น '@query '
+ *   - เจอ '<' ระดับ top-level => แทนเป็น '@parent '
+ */
+function transformAngleBrackets(body: string): string {
   let out = '';
   let i = 0;
   let braceCount = 0;
@@ -17,17 +23,29 @@ function transformAngleBracketsToQuery(body: string): string {
       if (braceCount < 0) braceCount = 0;
     }
 
-    if (braceCount === 0 && c === '>') {
-      let countGT = 1;
+    // เงื่อนไข: ต้องอยู่ top-level (braceCount===0) แล้วเจอ '>' หรือ '<'
+    // จากนั้นนับว่ามีกี่ตัวติดกัน
+    if (braceCount === 0 && (c === '>' || c === '<')) {
+      const symbol = c; // '>' หรือ '<'
+      let countSymbol = 1;
       let j = i + 1;
-      while (j < body.length && body[j] === '>') {
-        countGT++;
+      while (j < body.length && body[j] === symbol) {
+        countSymbol++;
         j++;
       }
-      i += countGT;
-      out += '@query';
-      if (countGT > 1) {
-        out += ' ' + '>'.repeat(countGT - 1);
+      i += countSymbol;
+
+      if (symbol === '>') {
+        out += '@query';
+      } else {
+        out += '@parent';
+      }
+
+      // ถ้ามีตัวติดกันมากกว่า 1 ตัว => เว้นวรรค + ใส่สัญลักษณ์ต่อ
+      // เช่น >> => "@query >"
+      // หรือ << => "@parent <"
+      if (countSymbol > 1) {
+        out += ' ' + symbol.repeat(countSymbol - 1);
       } else {
         out += ' ';
       }
@@ -54,9 +72,9 @@ function maybeTransformPluginQuerySelector(rawSelector: string): string {
         const pluginCls = pluginStatesConfig[prefix][suffix];
         if (useDescendant) {
           if (pluginCls.startsWith('[')) {
-            return ` ${pluginCls}`;
+            return `${pluginCls}`;
           } else {
-            return ` .${pluginCls.replace(/^\./, '')}`;
+            return `.${pluginCls.replace(/^\./, '')}`;
           }
         } else {
           if (pluginCls.startsWith('[')) {
@@ -71,19 +89,31 @@ function maybeTransformPluginQuerySelector(rawSelector: string): string {
   return trimmed;
 }
 
-export function parseNestedQueryBlocks(body: string): {
+/**
+ * parseNestedQueryBlocks
+ *   - ใช้ทั้ง @query และ @parent
+ *   - มีพารามิเตอร์เพิ่ม parentBlockDepth เพื่อห้าม nested @parent ภายใน @parent
+ */
+export function parseNestedQueryBlocks(
+  body: string,
+  parentBlockDepth = 0 // default 0
+): {
   lines: string[];
   queries: INestedQueryNode[];
 } {
-  body = transformAngleBracketsToQuery(body);
+  // ขั้นแรก transform ทั้ง '>' => '@query' และ '<' => '@parent'
+  body = transformAngleBrackets(body);
 
   const lines: string[] = [];
   const queries: INestedQueryNode[] = [];
 
   let i = 0;
   while (i < body.length) {
-    const queryIdx = body.indexOf('@query', i);
-    if (queryIdx === -1) {
+    // หา '@query' หรือ '@parent'
+    const regex = /@(query|parent)/g;
+    regex.lastIndex = i;
+    const match = regex.exec(body);
+    if (!match) {
       const leftover = body.slice(i).trim();
       if (leftover) {
         let leftoverLines = leftover
@@ -96,7 +126,13 @@ export function parseNestedQueryBlocks(body: string): {
       break;
     }
 
-    const chunkBefore = body.slice(i, queryIdx).trim();
+    // ถ้าเจอ match => แยกเป็น @query หรือ @parent
+    const fullMatch = match[0]; // "@query" หรือ "@parent"
+    const whichDir = match[1]; // "query" หรือ "parent"
+    const idxFound = match.index;
+
+    // chunk ก่อนหน้า => เก็บเป็น lines
+    const chunkBefore = body.slice(i, idxFound).trim();
     if (chunkBefore) {
       let chunkLines = chunkBefore
         .split('\n')
@@ -106,21 +142,32 @@ export function parseNestedQueryBlocks(body: string): {
       lines.push(...chunkLines);
     }
 
-    let startSelectorIdx = queryIdx + '@query'.length;
+    // ขยับ i => หลัง match
+    let startSelectorIdx = idxFound + fullMatch.length;
     while (startSelectorIdx < body.length && /\s/.test(body[startSelectorIdx])) {
       startSelectorIdx++;
     }
 
     const braceOpenIdx = body.indexOf('{', startSelectorIdx);
     if (braceOpenIdx === -1) {
-      throw new Error('[CSS-CTRL-ERR] parseNestedQueryBlocks: missing "{" after @query.');
+      throw new Error('[CSS-CTRL-ERR] parseNestedQueryBlocks: missing "{" after @query/@parent.');
     }
 
     let rawSelector = body.slice(startSelectorIdx, braceOpenIdx).trim();
     if (!rawSelector) {
-      throw new Error('[CSS-CTRL-ERR] parseNestedQueryBlocks: missing selector after @query.');
+      throw new Error(
+        '[CSS-CTRL-ERR] parseNestedQueryBlocks: missing selector after @query/@parent.'
+      );
     }
 
+    // เช็คเคส @parent ซ้อนใน @parent => ถ้า parentBlockDepth > 0 แล้วเจอ @parent อีก => throw
+    if (whichDir === 'parent' && parentBlockDepth > 0) {
+      throw new Error(
+        '[CSS-CTRL-ERR] Nested "<" (i.e. @parent) inside another "<" block is not allowed.'
+      );
+    }
+
+    // แทนที่ @scope.xxx => SCOPE_REF(xxx)
     rawSelector = rawSelector.replace(/@scope\.([\w-]+)/g, (_m, className) => {
       if (!className) {
         throw new Error('[CSS-CTRL-ERR] parseNestedQueryBlocks: missing className after @scope.');
@@ -128,8 +175,10 @@ export function parseNestedQueryBlocks(body: string): {
       return `SCOPE_REF(${className})`;
     });
 
+    // แปลง plugin syntax (:option-active => .listboxPlugin-active[aria-selected="true"], etc.)
     rawSelector = maybeTransformPluginQuerySelector(rawSelector);
 
+    // อ่าน body ภายใน {...}
     let nested = 1;
     let j = braceOpenIdx + 1;
     for (; j < body.length; j++) {
@@ -145,16 +194,22 @@ export function parseNestedQueryBlocks(body: string): {
 
     const innerBody = body.slice(braceOpenIdx + 1, j).trim();
 
-    const childResult = parseNestedQueryBlocks(innerBody);
+    // parse children (recursive) => ถ้า whichDir === 'parent' => parentBlockDepth+1
+    const childResult = parseNestedQueryBlocks(
+      innerBody,
+      whichDir === 'parent' ? parentBlockDepth + 1 : parentBlockDepth
+    );
 
     queries.push({
       selector: rawSelector,
       rawLines: childResult.lines,
       styleDef: undefined as any,
       children: childResult.queries,
+      // (NEW) ใส่ flag บอกว่าเป็น parentBlock ไหม
+      isParentBlock: whichDir === 'parent',
     });
 
-    i = j + 1;
+    i = j + 1; // ต่อหลัง '}'
   }
 
   return { lines, queries };
@@ -162,7 +217,7 @@ export function parseNestedQueryBlocks(body: string): {
 
 /**
  * (CHANGED) mergeLineForQueryBlock
- * เดิม throw error ถ้าเจอ ';', ตอนนี้ลบออกแทน
+ * เดิม throw error ถ้าเจอ ';', ตอนนี้เปลี่ยนเป็นลบออกแทน
  */
 function mergeLineForQueryBlock(lines: string[]): string[] {
   const result: string[] = [];
@@ -178,7 +233,11 @@ function mergeLineForQueryBlock(lines: string[]): string[] {
 
       if (ch === '(') {
         const ahead = trimmed.slice(Math.max(0, i - 5), i + 1).toLowerCase();
-        if (/\b(rgba|rgb|calc|hsl|url|clamp|var)\($/.test(ahead)) {
+        if (
+          /\b(rgba|rgb|calc|hsl|url|clamp|var|min|max|attr|counter|counters|env|repeat|linear-gradient|radial-gradient|conic-gradient|image-set|matrix|translate|translatex|translatey|translatez|translate3d|scale|scalex|scaley|scalez|scale3d|rotate|rotatex|rotatey|rotatez|rotate3d|skew|skewx|skewy|perspective)\($/.test(
+            ahead
+          )
+        ) {
           inCssFunc = true;
         } else {
           if (parenCount > 0 && !inCssFunc) {

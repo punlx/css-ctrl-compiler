@@ -43,7 +43,10 @@ import { parseSingleAbbr } from './generateCssCommand/parsers/parseSingleAbbr';
 import { createBorderStyleProvider } from './createBorderStyleProvider';
 
 /* ------------------ (NEW) import ghostQueryDecorations ------------------ */
-import { updateQueryDecorations, registerAutoInsertSpaceWhenGt } from './ghostQueryDecorations';
+import {
+  updateGhostDecorations,
+  registerAutoInsertSpaceWhenBracket,
+} from './ghostQueryDecorations';
 
 /* ------------------ (NEW) import for autoDeleteProvider ------------------ */
 import { createCssCtrlAutoDeleteProvider } from './autoDeleteProvider';
@@ -66,9 +69,11 @@ export let globalTypographyDict: Record<string, string> = {};
 export async function activate(context: vscode.ExtensionContext) {
   console.log('Css-CTRL Intellisense is now active!');
 
+  // สร้าง DiagnosticCollection สำหรับไว้เก็บ diagnostic
   const cssCtrlDiagnosticCollection = vscode.languages.createDiagnosticCollection('ctrl');
   context.subscriptions.push(cssCtrlDiagnosticCollection);
 
+  // เตรียมข้อมูล theme เช่น palette
   await initPaletteMap();
   let paletteColors: Record<string, Record<string, string>> = {};
   let screenDict: Record<string, string> = {};
@@ -77,6 +82,9 @@ export async function activate(context: vscode.ExtensionContext) {
   let spacingDict: Record<string, string> = {};
   let defineMap: Record<string, string[]> = {};
   let defineRawMap: Record<string, Record<string, string>> = {};
+
+  // (NEW) เรียก registerAutoInsertSpaceWhenBracket(context) ตั้งแต่ต้น
+  registerAutoInsertSpaceWhenBracket(context);
 
   if (vscode.workspace.workspaceFolders?.length) {
     try {
@@ -147,62 +155,63 @@ export async function activate(context: vscode.ExtensionContext) {
     borderStyleProvider
   );
 
+  // สำหรับ spacing ghost
   initSpacingMap(spacingDict);
 
-  /* (NEW) เรียก initThemePropertyMap เพื่อเตรียม dict defineMap ไว้ใช้กับ ghost theme property */
+  // (NEW) init define map สำหรับ ghost theme property
   initThemePropertyMap(defineMap);
 
-  /* (NEW) เรียก initThemeKeyframeNames เพื่อส่งชื่อ keyframe เข้าไปเก็บใช้กับ ghostKeyframeDecorations */
+  // (NEW) init keyframe names
   initThemeKeyframeNames(Object.keys(keyframeDict));
 
-  // อัปเดต ghost text ต่าง ๆ
+  // อัปเดต ghost text ต่าง ๆ หากมี active editor ตอนเปิด extension
   if (vscode.window.activeTextEditor) {
     updateDecorations(vscode.window.activeTextEditor);
     updateSpacingDecorations(vscode.window.activeTextEditor);
     updateImportantDecorations(vscode.window.activeTextEditor);
-    updateQueryDecorations(vscode.window.activeTextEditor);
-    registerAutoInsertSpaceWhenGt(context);
+    updateGhostDecorations(vscode.window.activeTextEditor);
     updateBindDecorations(vscode.window.activeTextEditor);
-    /* (NEW) updateThemePropertyDecorations */
     updateThemePropertyDecorations(vscode.window.activeTextEditor);
-    /* (NEW) updateKeyframeDecorations */
     updateKeyframeDecorations(vscode.window.activeTextEditor);
+    // (note) registerAutoInsertSpaceWhenBracket(context) เรียกไปแล้วก่อนหน้า
   }
 
+  // เมื่อเปลี่ยน active text editor ให้ update decorations
   const changeEditorDisposable = vscode.window.onDidChangeActiveTextEditor((editor) => {
     if (editor) {
       updateDecorations(editor);
       updateSpacingDecorations(editor);
       updateImportantDecorations(editor);
-      updateQueryDecorations(editor);
+      updateGhostDecorations(editor);
       updateBindDecorations(editor);
       updateThemePropertyDecorations(editor);
-      /* (NEW) updateKeyframeDecorations */
       updateKeyframeDecorations(editor);
     }
   });
   context.subscriptions.push(changeEditorDisposable);
 
+  // เมื่อมีการแก้ไขเอกสาร (onDidChangeTextDocument) ก็ update ghost text
   const changeDocDisposable = vscode.workspace.onDidChangeTextDocument((event) => {
     const editor = vscode.window.activeTextEditor;
     if (editor && event.document === editor.document) {
       updateDecorations(editor);
       updateSpacingDecorations(editor);
       updateImportantDecorations(editor);
-      updateQueryDecorations(editor);
+      updateGhostDecorations(editor);
       updateBindDecorations(editor);
       updateThemePropertyDecorations(editor);
-      /* (NEW) updateKeyframeDecorations */
       updateKeyframeDecorations(editor);
     }
   });
   context.subscriptions.push(changeDocDisposable);
 
+  // register generateGenericProvider
   context.subscriptions.push(generateGenericProvider);
 
   globalBreakpointDict = screenDict;
   globalTypographyDict = typographyDict;
 
+  // เตรียม globalDefineMap เอาไว้
   for (const mainKey in defineRawMap) {
     globalDefineMap[mainKey] = {};
     const subObj = defineRawMap[mainKey];
@@ -255,6 +264,7 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(willSaveDisposable);
 
+  // สร้าง command สำหรับให้ user เรียกด้วยตัวเอง -> createCssCtrlCss และ generate
   const combinedCommand = vscode.commands.registerCommand(
     'ctrl.createCssCtrlCssAndGenerate',
     async () => {
@@ -307,7 +317,7 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(themeWillSaveDisposable);
 
-  // (NEW) createCssCtrlAutoDeleteProvider(context)
+  // (NEW) createCssCtrlAutoDeleteProvider(context) => auto-delete some code if needed
   createCssCtrlAutoDeleteProvider(context);
 }
 

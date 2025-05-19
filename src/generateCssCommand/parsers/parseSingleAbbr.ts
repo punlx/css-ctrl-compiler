@@ -17,12 +17,13 @@ import { parsePluginContainerStyle } from './parsePluginContainerStyle';
 
 /**
  * parseSingleAbbr
- * @param abbrLine         ex. "bg[red]" or "hover(bg[red])" or "@query .box { ... }"
+ * @param abbrLine         ex. "bg[red]" หรือ "hover(bg[red])" หรือ "> .child { ... }"
  * @param styleDef
- * @param isConstContext   true => in @const or theme.property block
- * @param isQueryBlock     true => we are inside an @query block (=> disallow $variable)
- * @param isDefineContext  true => theme.property
- * @param keyframeNameMap  (NEW) สำหรับ rename keyframe (move => app_move)
+ * @param isConstContext   true => กำลัง parse ใน @const หรือ theme.property block
+ * @param isQueryBlock     true => อยู่ใน @query block => จะมีข้อจำกัด (ห้าม $var, ห้ามประกาศ local var)
+ * @param isDefineContext  true => theme.property(...)
+ * @param keyframeNameMap  (ใช้ rename keyframe)
+ * @param isParentBlock    (NEW) => ถ้าเป็น parent block => ข้อจำกัดเหมือน query block
  */
 export function parseSingleAbbr(
   abbrLine: string,
@@ -30,9 +31,15 @@ export function parseSingleAbbr(
   isConstContext: boolean = false,
   isQueryBlock: boolean = false,
   isDefineContext: boolean = false,
-  keyframeNameMap?: Map<string, string>
+  keyframeNameMap?: Map<string, string>,
+  isParentBlock: boolean = false
 ) {
   const trimmed = abbrLine.trim();
+
+  // -----------------------------------------------
+  // (A) เช็ค !important restrictions หรืออื่น ๆ ใน @const / theme.property
+  //     เช่น $var / @query
+  // -----------------------------------------------
 
   // ไม่อนุญาต $var ใน property block
   if (isDefineContext && /^\$[\w-]+\[/.test(trimmed)) {
@@ -41,23 +48,40 @@ export function parseSingleAbbr(
     );
   }
 
-  // ไม่อนุญาต @query ใน @const/@property
+  // ไม่อนุญาตให้ใช้ @query ใน @const
   if (isConstContext && trimmed.startsWith('@query')) {
     throw new Error(
       `[CSS-CTRL-ERR] @query is not allowed in @const or theme.property() block. Found: "${trimmed}"`
     );
   }
 
-  // ถ้าอยู่ใน @query block => ห้ามประกาศ localVar, ห้ามใช้ $variable
-  if (isQueryBlock) {
-    if (/^--&[\w-]+\[/.test(trimmed)) {
+  // (NEW) เช็คการใช้ '>' หรือ '<' ภายใน @const
+  //     สมมติเราถือว่า ถ้าพบรูปแบบ "> .xxx" หรือ "< .xxx" ในบรรทัด => ไม่อนุญาต
+  //     (ปรับ regex ได้ตามต้องการ)
+  if (isConstContext) {
+    // ตัวอย่างเช็คง่าย ๆ ว่าเจอ '>' หรือ '<' ตามด้วยช่องว่าง + '.' + ตัวอักษร
+    if (/(^|\s|\r|\n)[><]\s*\.[\w-]/.test(' ' + trimmed)) {
       throw new Error(
-        `[CSS-CTRL-ERR] Local var not allowed to declare inside @query block. Found: "${trimmed}"`
+        `[CSS-CTRL-ERR] Nested block ('>' or '<') not allowed inside @const. Found: "${trimmed}"`
       );
     }
+  }
+
+  // รวมเงื่อนไขบล็อคแบบ restrict => isQueryBlock || isParentBlock
+  const isRestrictedBlock = isQueryBlock || isParentBlock;
+
+  // ถ้าอยู่ใน restrictedBlock => ห้ามประกาศ localVar (--&xxx) หรือ $var
+  if (isRestrictedBlock) {
+    // เช็ค localVar declaration "--&..."
+    if (/^--&[\w-]+\[/.test(trimmed)) {
+      throw new Error(
+        `[CSS-CTRL-ERR] Local var not allowed to declare inside @query or <block. Found: "${trimmed}"`
+      );
+    }
+    // เช็ค $var
     if (/^\$[\w-]+\[/.test(trimmed)) {
       throw new Error(
-        `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${trimmed}"`
+        `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query or <block. Found: "${trimmed}"`
       );
     }
   }
@@ -67,20 +91,19 @@ export function parseSingleAbbr(
     styleDef.hasRuntimeVar = true;
   }
 
-  // ถ้ารูปแบบไม่มี "(" => parseBaseStyle
+  // -----------------------------------------------------
+  // (B) แยกกรณีมี '(' => อาจเป็น state/pseudo/container/screen ฯลฯ
+  // -----------------------------------------------------
   const openParenIndex = trimmed.indexOf('(');
   if (openParenIndex === -1) {
-    parseBaseStyle(trimmed, styleDef, isConstContext, isQueryBlock, keyframeNameMap);
+    parseBaseStyle(trimmed, styleDef, isConstContext, isRestrictedBlock, keyframeNameMap);
     return;
   }
 
-  // (NEW) เช็ค pluginState ผ่าน pluginStatesConfig แทน regex
-  // 1) แยก prefix: funcName = substring ก่อน '('
-  // 2) split ด้วย "-"
+  // เช็ค pluginState (prefix-suffix) => "option-active", "accordion-expanded", ฯลฯ
   const funcName = trimmed.slice(0, openParenIndex).trim();
   const dashPos = funcName.indexOf('-');
   if (dashPos > 0) {
-    // prefixSuffix
     const pluginPrefix = funcName.slice(0, dashPos);
     const pluginSuffix = funcName.slice(dashPos + 1);
     if (
@@ -89,43 +112,48 @@ export function parseSingleAbbr(
       pluginStatesConfig[pluginPrefix] &&
       pluginStatesConfig[pluginPrefix][pluginSuffix]
     ) {
-      // => เป็น pluginState
-      parsePluginStateStyle(trimmed, styleDef, isConstContext, isQueryBlock, keyframeNameMap);
+      parsePluginStateStyle(trimmed, styleDef, isConstContext, isRestrictedBlock, keyframeNameMap);
       return;
     }
   }
 
-  // (MODIFIED) เช็ค pluginContainerConfig ตรง ๆ
+  // pluginContainer ?
   if (pluginContainerConfig.hasOwnProperty(funcName)) {
-    parsePluginContainerStyle(trimmed, styleDef, isConstContext, isQueryBlock, keyframeNameMap);
+    parsePluginContainerStyle(
+      trimmed,
+      styleDef,
+      isConstContext,
+      isRestrictedBlock,
+      keyframeNameMap
+    );
     return;
   }
 
-  // state
-  const prefix = funcName; // ex. "hover", "focus", etc.
+  // state (hover, focus, active, ...)
+  const prefix = funcName;
   if (knownStates.includes(prefix)) {
-    parseStateStyle(trimmed, styleDef, isConstContext, isQueryBlock);
+    parseStateStyle(trimmed, styleDef, isConstContext, isRestrictedBlock);
     return;
   }
 
-  // pseudo
+  // pseudo (before, after, placeholder, ...)
   if (supportedPseudos.includes(prefix)) {
-    parsePseudoElementStyle(trimmed, styleDef, isConstContext, isQueryBlock);
+    parsePseudoElementStyle(trimmed, styleDef, isConstContext, isRestrictedBlock);
     return;
   }
 
-  // screen
+  // screen(...)
   if (prefix === 'screen') {
-    parseScreenStyle(trimmed, styleDef, isConstContext, isQueryBlock);
+    parseScreenStyle(trimmed, styleDef, isConstContext, isRestrictedBlock);
     return;
   }
 
-  // container
+  // container(...)
   if (prefix === 'container') {
-    parseContainerStyle(trimmed, styleDef, isConstContext, isQueryBlock);
+    parseContainerStyle(trimmed, styleDef, isConstContext, isRestrictedBlock);
     return;
   }
 
-  // ไม่เข้าเคสไหน -> parseBaseStyle
-  parseBaseStyle(trimmed, styleDef, isConstContext, isQueryBlock, keyframeNameMap);
+  // fallback => parseBaseStyle
+  parseBaseStyle(trimmed, styleDef, isConstContext, isRestrictedBlock, keyframeNameMap);
 }

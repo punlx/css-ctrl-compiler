@@ -1,6 +1,6 @@
 // src/generateCssCommand/builders/buildCssText.ts
 
-import { IStyleDefinition } from '../types';
+import { IStyleDefinition, INestedQueryNode } from '../types';
 
 /**
  * สร้าง CSS text จาก styleDef รวม base/states/screens/pseudos
@@ -143,7 +143,6 @@ export function buildCssText(
         const replacedVal = replaceLocalVarUsage(pcObj.props[p], displayName);
         containerProps += `${p}:${replacedVal};`;
       }
-      // e.g. .drawerPluginContainer:has(.app_box){ ... }
       cssText += `.${pcObj.containerName}:has(.${displayName}){${containerProps}}`;
     }
   }
@@ -161,17 +160,25 @@ export function buildCssText(
  */
 function buildNestedQueryCss(
   parentDisplayName: string,
-  node: {
-    selector: string;
-    styleDef: IStyleDefinition;
-    children: any[];
-  },
+  node: INestedQueryNode,
   rootDisplayName: string,
   shortNameToFinal: Map<string, string>,
   scopeName: string
 ): string {
-  let finalSelector = transformNestedSelector(parentDisplayName, node.selector);
-  finalSelector = maybeResolveScopeRef(finalSelector, shortNameToFinal, scopeName);
+  // ถ้าเป็น parentBlock => สร้าง selector แบบ .<node.selector>:has(.<parentDisplayName>)
+  // แต่ยังต้องเช็คว่าใน node.selector มี '&' ไหม => replace & => parentDisplayName
+  let finalSelector: string;
+
+  if (node.isParentBlock) {
+    // parentBlock => use transformParentSelector
+    finalSelector = transformParentSelector(parentDisplayName, node.selector);
+    // resolve scope ref
+    finalSelector = maybeResolveScopeRef(finalSelector, shortNameToFinal, scopeName);
+  } else {
+    // queryBlock => ใช้ transformNestedSelector ตามปกติ
+    finalSelector = transformNestedSelector(parentDisplayName, node.selector);
+    finalSelector = maybeResolveScopeRef(finalSelector, shortNameToFinal, scopeName);
+  }
 
   let out = buildRawCssText(
     finalSelector.replace(/^\./, ''),
@@ -259,7 +266,7 @@ function buildRawCssText(
     }
   }
 
-  // (NEW) pluginStates ใน nested
+  // pluginStates
   if ((styleDef as any).pluginStates) {
     const pluginObj = (styleDef as any).pluginStates;
     for (const funcName in pluginObj) {
@@ -268,15 +275,13 @@ function buildRawCssText(
       for (const p in props) {
         pluginProps += `${p}:${replaceLocalVarUsage(props[p], rootDisplayName)};`;
       }
-      // เดิมต่อเป็น `.${finalSelector}.${classAttr}` ทำให้บางเคสกลายเป็น .[role="..."]
-      // แก้ไขโดยใช้ joinSelector
       const sel = dotIfNeeded(finalSelector);
       const finalSel = joinSelector(sel, classAttr);
       cssText += `${finalSel}{${pluginProps}}`;
     }
   }
 
-  // (MODIFIED) pluginContainers ใน nested
+  // pluginContainers
   if ((styleDef as any).pluginContainers) {
     const pcArr = (styleDef as any).pluginContainers;
     for (const pcObj of pcArr) {
@@ -291,7 +296,15 @@ function buildRawCssText(
   // recursive nestedQueries
   if (styleDef.nestedQueries && styleDef.nestedQueries.length > 0) {
     for (const nq of styleDef.nestedQueries) {
-      let sel2 = transformNestedSelector(finalSelector.replace(/^\./, ''), nq.selector);
+      let sel2: string;
+      if (nq.isParentBlock) {
+        // ถ้าเป็น parentBlock => ใช้ transformParentSelector
+        sel2 = transformParentSelector(finalSelector.replace(/^\./, ''), nq.selector);
+      } else {
+        // ปกติ => transformNestedSelector
+        sel2 = transformNestedSelector(finalSelector.replace(/^\./, ''), nq.selector);
+      }
+
       sel2 = maybeResolveScopeRef(sel2, shortNameToFinal, scopeName);
 
       cssText += buildRawCssText(
@@ -319,7 +332,7 @@ function buildRawCssText(
 }
 
 /**
- * สร้าง selector สำหรับ nested block
+ * สร้าง selector สำหรับ nested block (กรณี @query)
  * ถ้า childSel มี '&' => แทนที่ด้วย .parentSel
  * ไม่งั้น => .parentSel childSel
  */
@@ -329,6 +342,23 @@ function transformNestedSelector(parentSel: string, childSel: string): string {
     return trimmed.replace(/&/g, `.${parentSel}`);
   }
   return `.${parentSel} ${trimmed}`;
+}
+
+/**
+ * (NEW) transformParentSelector
+ * ใช้ในกรณี block @parent => สร้าง .selector:has(.childSel)
+ * โดยถ้า childSel มี '&' => แทนที่ด้วย .childSel
+ */
+function transformParentSelector(childSel: string, parentSelector: string): string {
+  const trimmed = parentSelector.trim();
+  // ถ้า parentSelector มี '&' => replace & ด้วย .childSel
+  if (trimmed.includes('&')) {
+    // & => .childSel
+    const replaced = trimmed.replace(/&/g, `.${childSel}`);
+    return `${replaced}:has(.${childSel})`;
+  }
+  // ไม่มีก็ => parentSelector:has(.childSel)
+  return `${trimmed}:has(.${childSel})`;
 }
 
 /**

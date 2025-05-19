@@ -70,6 +70,8 @@ function parseNestedQueryDef(
       selector: node.selector,
       styleDef: subDef,
       children: childrenParsed,
+      // **สำคัญ**: preserve isParentBlock
+      isParentBlock: node.isParentBlock,
     });
   }
 
@@ -144,7 +146,13 @@ export function processClassBlocks(
       parseSingleAbbr(ln, classStyleDef, false, false, false, keyframeNameMap);
     }
 
-    classStyleDef.nestedQueries = parseNestedQueryDef(queries, classStyleDef, constMap, keyframeNameMap);
+    // (CHANGED) parseNestedQueryDef => ใส่ isParentBlock
+    classStyleDef.nestedQueries = parseNestedQueryDef(
+      queries,
+      classStyleDef,
+      constMap,
+      keyframeNameMap
+    );
 
     if ((classStyleDef as any)._usedLocalVars) {
       for (const usedVar of (classStyleDef as any)._usedLocalVars) {
@@ -170,7 +178,7 @@ export function processClassBlocks(
 
 /**
  * (CHANGED) mergeLineForClass
- * เดิม throw error ถ้าเจอ ';', เปลี่ยนเป็นลบ ';'
+ * เดิมเรา throw error ถ้าเจอ ';' -> ตอนนี้เปลี่ยนเป็นลบออก
  */
 function mergeLineForClass(lines: string[]): string[] {
   const result: string[] = [];

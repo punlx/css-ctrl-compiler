@@ -2,24 +2,24 @@
 import * as vscode from 'vscode';
 
 /**
- * ghostQueryDecorationType:
- * DecorationType สำหรับไว้แสดง ghost text "query" ตรงตำแหน่งที่กำหนด
+ * ghostDecorationType:
+ * ใช้สำหรับแสดง ghost text ให้ทั้ง "query" (ของ '>') และ "parent" (ของ '<')
  */
-export const ghostQueryDecorationType = vscode.window.createTextEditorDecorationType({});
+export const ghostDecorationType = vscode.window.createTextEditorDecorationType({});
 
 /**
- * updateQueryDecorations:
+ * updateGhostDecorations:
  * เรียกใช้เมื่อ text หรือ active editor เปลี่ยน
  * - ทำงานเฉพาะไฟล์ .ctrl.ts หรือ ctrl.theme.ts
- * - หาตำแหน่งที่เป็น '>' ซึ่งอยู่ภายใน:
- *   1) template literal ของ css`...` (หรือ css<...>`...`)
- *   2) อยู่ใน block { ... } (curly braces) ภายใน template
- *   3) ถ้าบรรทัดเดียวกันมี '> >' ติดกันโดยไม่มี whitespace คั่น => แสดง ghost text ให้เฉพาะตัวแรก
- * - จากนั้นจะวาง ghost text "query" ต่อท้ายตัว '>' จริง ๆ (เฉพาะในหน้าจอ ไม่แก้ไฟล์)
+ * - หา template literal ของ css`...` (หรือ css<...>`...`)
+ * - ใน template นั้นนับ curly brace depth เพื่อดูว่าอยู่ใน block `{ ... }`
+ * - หากเจอ '>' หรือ '<' ใน depth > 0 => แสดง ghost text "query" (หลัง '>') หรือ "parent" (หลัง '<')
+ * - ถ้าบรรทัดเดียวกันมี '>>' หรือต่อกัน (`> >` ไม่มี whitespace) ให้แสดงเฉพาะตัวแรก (กับ '<' ก็เช่นกัน)
  */
-export function updateQueryDecorations(editor: vscode.TextEditor) {
+export function updateGhostDecorations(editor: vscode.TextEditor) {
   if (!isCtrlOrThemeFile(editor.document.fileName)) {
-    editor.setDecorations(ghostQueryDecorationType, []);
+    // ถ้าไม่ใช่ไฟล์ .ctrl.ts หรือ .theme.ts ก็ไม่ต้องทำอะไร
+    editor.setDecorations(ghostDecorationType, []);
     return;
   }
 
@@ -27,19 +27,29 @@ export function updateQueryDecorations(editor: vscode.TextEditor) {
   const fullText = document.getText();
   // หา template literal range ของ css
   const templateRanges = findCssTemplateRanges(fullText);
-  // หา positions ของ '>'
-  const allPositions: number[] = [];
+
+  // รวม positions ของ '>' และ '<'
+  // เราจะแยก positions เป็น 2 ชุด เพื่อรู้ว่าอันไหนควรแสดง query หรือ parent
+  const gtOffsets: number[] = [];
+  const ltOffsets: number[] = [];
+
   for (const rangeObj of templateRanges) {
-    const positionsInBlock = gatherQueryGtPositionsInSubstr(fullText, rangeObj.start, rangeObj.end);
-    allPositions.push(...positionsInBlock);
+    // หาตำแหน่ง '>' ใน block
+    const positionsGt = gatherSymbolPositionsInSubstr(fullText, rangeObj.start, rangeObj.end, '>');
+    gtOffsets.push(...positionsGt);
+
+    // หาตำแหน่ง '<' ใน block
+    const positionsLt = gatherSymbolPositionsInSubstr(fullText, rangeObj.start, rangeObj.end, '<');
+    ltOffsets.push(...positionsLt);
   }
 
+  // สร้าง decoration options
   const decorations: vscode.DecorationOptions[] = [];
-  for (const offset of allPositions) {
-    // วาง ghost text หลัง '>'
+
+  // สำหรับ '>'
+  for (const offset of gtOffsets) {
     const afterOffset = offset + 1;
     const pos = document.positionAt(afterOffset);
-
     const decoration: vscode.DecorationOptions = {
       range: new vscode.Range(pos, pos),
       renderOptions: {
@@ -53,58 +63,81 @@ export function updateQueryDecorations(editor: vscode.TextEditor) {
     decorations.push(decoration);
   }
 
-  editor.setDecorations(ghostQueryDecorationType, decorations);
+  // สำหรับ '<'
+  for (const offset of ltOffsets) {
+    const afterOffset = offset + 1;
+    const pos = document.positionAt(afterOffset);
+    const decoration: vscode.DecorationOptions = {
+      range: new vscode.Range(pos, pos),
+      renderOptions: {
+        after: {
+          contentText: 'parent',
+          fontStyle: 'italic',
+          color: 'rgb(133, 133, 133)',
+        },
+      },
+    };
+    decorations.push(decoration);
+  }
+
+  // ติดตั้ง decorations ทั้งหมด
+  editor.setDecorations(ghostDecorationType, decorations);
 }
 
 /**
- * registerAutoInsertSpaceWhenGt:
- * - ฟังก์ชันสำหรับ "ดัก" ว่าเมื่อผู้ใช้พิมพ์ '>' ในบริเวณเดียวกับเงื่อนไข ghost text
- *   ให้แทรก space ( " " ) ลงในไฟล์จริงอัตโนมัติ
+ * registerAutoInsertSpaceWhenBracket:
+ * - ฟังก์ชันสำหรับ "ดัก" ว่าเมื่อผู้ใช้พิมพ์ '>' หรือ '<'
+ *   ในบริเวณเดียวกับเงื่อนไข ghost text ให้แทรก space ( " " ) ลงในไฟล์จริงอัตโนมัติ
  * - ควรเรียกใน extension.ts (ตอน activate) เพื่อให้ทำงานตลอด
  */
-export function registerAutoInsertSpaceWhenGt(context: vscode.ExtensionContext) {
+export function registerAutoInsertSpaceWhenBracket(context: vscode.ExtensionContext) {
   const disposable = vscode.workspace.onDidChangeTextDocument(async (event) => {
     const doc = event.document;
     if (!isCtrlOrThemeFile(doc.fileName)) {
       return;
     }
 
-    // contentChanges อาจมีหลายรายการ ถ้า user กดทีเดียว
     if (event.contentChanges.length === 0) {
       return;
     }
 
-    // ตรวจเฉพาะเคสผู้ใช้พิมพ์ 1 ตัวอักษร => '>'
+    // ตรวจเฉพาะเคสผู้ใช้พิมพ์ 1 ตัวอักษร => '>' หรือ '<'
     const change = event.contentChanges[0];
-    if (change.text !== '>') {
+    if (change.text !== '>' && change.text !== '<') {
       return;
     }
 
-    // ตำแหน่ง offset ที่ user พิมพ์ '>'
+    // ตำแหน่ง offset ที่ user พิมพ์
     const offset = doc.offsetAt(change.range.start);
 
-    // เช็คว่า offset นี้อยู่ใน positions ที่ gatherQueryGtPositionsInSubstr ได้หรือไม่
+    // รวบรวมตำแหน่ง '>' และ '<' ที่ valid
     const fullText = doc.getText();
     const templateRanges = findCssTemplateRanges(fullText);
-    const validOffsets: Set<number> = new Set();
+    const validOffsetsGt: Set<number> = new Set();
+    const validOffsetsLt: Set<number> = new Set();
+
     for (const r of templateRanges) {
-      const positions = gatherQueryGtPositionsInSubstr(fullText, r.start, r.end);
-      positions.forEach((pos) => validOffsets.add(pos));
+      const gtPositions = gatherSymbolPositionsInSubstr(fullText, r.start, r.end, '>');
+      gtPositions.forEach((pos) => validOffsetsGt.add(pos));
+
+      const ltPositions = gatherSymbolPositionsInSubstr(fullText, r.start, r.end, '<');
+      ltPositions.forEach((pos) => validOffsetsLt.add(pos));
     }
 
-    if (!validOffsets.has(offset)) {
-      // ถ้า offset นี้ไม่อยู่ในเงื่อนไขเดียวกับ ghost text => ไม่ต้องแทรก space
-      return;
-    }
+    // ถ้า offset นี้อยู่ใน set ของ '>' หรือ '<' => แทรก space
+    // (กรณีอยากแยก logic ว่าเฉพาะ '>' หรือเฉพาะ '<' ก็ปรับ if ด้านล่างได้)
+    const typedSymbol = change.text;
+    const isValidGt = typedSymbol === '>' && validOffsetsGt.has(offset);
+    const isValidLt = typedSymbol === '<' && validOffsetsLt.has(offset);
 
-    // ถ้าเข้าเงื่อนไข => แทรก space ที่ offset + 1 (ต่อท้าย '>')
-    const edit = new vscode.WorkspaceEdit();
-    const insertPos = doc.positionAt(offset + 1);
-    edit.insert(doc.uri, insertPos, ' ');
-    await vscode.workspace.applyEdit(edit);
-    // หมายเหตุ: เคอร์เซอร์ผู้ใช้จะยังอยู่หลัง '>' เหมือนเดิม (VSCode จะเลื่อนตาม input เดิม)
-    // ถ้าอยากเลื่อน cursor ไปหลัง space => เขียน logic เพิ่มได้
+    if (isValidGt || isValidLt) {
+      const edit = new vscode.WorkspaceEdit();
+      const insertPos = doc.positionAt(offset + 1);
+      edit.insert(doc.uri, insertPos, ' ');
+      await vscode.workspace.applyEdit(edit);
+    }
   });
+
   context.subscriptions.push(disposable);
 }
 
@@ -123,6 +156,7 @@ function isCtrlOrThemeFile(fileName: string): boolean {
  */
 function findCssTemplateRanges(text: string): Array<{ start: number; end: number }> {
   const result: Array<{ start: number; end: number }> = [];
+  // จับกรณี css`...` หรือ css<...>`...`
   const openRegex = /(\bcss\b(?:\s*<[^>]*>)?)\s*`/g;
   let match: RegExpExecArray | null;
 
@@ -142,7 +176,7 @@ function findCssTemplateRanges(text: string): Array<{ start: number; end: number
 /**
  * findClosingBacktick:
  * - หา backtick ปิดตั้งแต่ start
- * - ไม่จัดการ escape \` แบบซับซ้อน
+ * - ไม่ได้จัดการ escape \` แบบซับซ้อน (naive)
  */
 function findClosingBacktick(text: string, start: number): number {
   for (let i = start; i < text.length; i++) {
@@ -154,15 +188,17 @@ function findClosingBacktick(text: string, start: number): number {
 }
 
 /**
- * gatherQueryGtPositionsInSubstr:
+ * gatherSymbolPositionsInSubstr:
  * - รับช่วง [startOffset, endOffset) แล้วนับ curly brace depth
- * - ถ้าเจอ '>' ใน depth>0 => เก็บ offset
- * - ถ้าบรรทัดเดียวมี '> >' ติดกัน (ไม่มี whitespace คั่น) => เก็บเฉพาะตัวแรก
+ * - ถ้าเจอ symbol ('>' หรือ '<') ใน depth>0 => เก็บ offset
+ * - ถ้าบรรทัดเดียวมี symbol ติดกัน (เช่น `>>`, `<<`) โดยไม่มี whitespace คั่น => เก็บเฉพาะตัวแรก
+ *   (ปรับ logic เดิมของ '> >' มาเป็นกลาง)
  */
-function gatherQueryGtPositionsInSubstr(
+function gatherSymbolPositionsInSubstr(
   fullText: string,
   startOffset: number,
-  endOffset: number
+  endOffset: number,
+  symbol: '>' | '<'
 ): number[] {
   const positions: number[] = [];
   let curlyDepth = 0;
@@ -171,9 +207,9 @@ function gatherQueryGtPositionsInSubstr(
   const slice = fullText.substring(startOffset, endOffset);
   const lines = slice.split('\n');
 
-  for (let ln = 0; ln < lines.length; ln++) {
-    const lineText = lines[ln];
-    let skipNextGtInLine = false;
+  for (const lineText of lines) {
+    let skipNextSymbolInLine = false;
+
     for (let i = 0; i < lineText.length; i++) {
       const c = lineText[i];
       if (c === '{') {
@@ -182,15 +218,15 @@ function gatherQueryGtPositionsInSubstr(
         if (curlyDepth > 0) {
           curlyDepth--;
         }
-      } else if (c === '>') {
-        if (curlyDepth > 0 && !skipNextGtInLine) {
+      } else if (c === symbol) {
+        if (curlyDepth > 0 && !skipNextSymbolInLine) {
           positions.push(offsetCursor + i);
-          skipNextGtInLine = true;
+          skipNextSymbolInLine = true;
         }
       } else {
-        // ถ้าเจออักขระอื่นที่ไม่ใช่ whitespace => รีเซ็ต skipNextGtInLine
+        // ถ้าเจออักขระอื่นที่ไม่ใช่ whitespace => รีเซ็ต skipNextSymbolInLine
         if (!/\s/.test(c)) {
-          skipNextGtInLine = false;
+          skipNextSymbolInLine = false;
         }
       }
     }

@@ -49,6 +49,7 @@ export interface INestedQueryNode {
   rawLines: string[];
   styleDef: IStyleDefinition;
   children: INestedQueryNode[];
+  isParentBlock: boolean;
 }
 
 /** directive */
