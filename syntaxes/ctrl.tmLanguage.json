@@ -69,7 +69,7 @@
         },
         {
           "name": "keyword.control.at-rule.css",
-          "match": "(@scope|@bind|@const|@use|@query|@keyframe)"
+          "match": "(@scope|@bind|@const|@use|@query|@keyframe|@var)"
         },
         {
           "name": "keyword.control.at-rule.media.css",

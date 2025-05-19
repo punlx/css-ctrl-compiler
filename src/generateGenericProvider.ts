@@ -215,7 +215,6 @@ function formatKeyframeBody(body: string, indent: string): string {
   return result.replace(/\n\s*\n/g, '\n');
 }
 
-
 function formatInsideKeyframe(content: string, indent: string): string {
   const lines = content
     .split('\n')
@@ -244,11 +243,12 @@ function generateGeneric(sourceCode: string): string {
   templateContent = transformAngleBracketsLineBased(templateContent);
 
   // ---------------------------------------------------------------------------
-  // 2) เตรียมโครงสร้าง classMap / constMap / keyframeMap
+  // 2) เตรียมโครงสร้าง classMap / constMap / keyframeMap / varSet
   // ---------------------------------------------------------------------------
   const classMap: Record<string, Set<string>> = {};
   const constMap: Record<string, Set<string>> = {};
   const keyframeMap: Record<string, Set<string>> = {};
+  const varSet: Set<string> = new Set();
 
   // ---------------------------------------------------------------------------
   // 3) ฟังก์ชัน parse $xxx[...] (รวม pseudo)
@@ -415,17 +415,29 @@ function generateGeneric(sourceCode: string): string {
   }
 
   // ---------------------------------------------------------------------------
-  // 6) แยก directive @scope, @const, @keyframe ออกจากเนื้อหา
+  // 6) แยก directive @scope, @var, @const, @keyframe ออกจากเนื้อหา
   //    (CHANGED) ตัด logic แยก @bind ออก (ให้ไหลเป็น normalLines แทน)
   // ---------------------------------------------------------------------------
   const lines = templateContent.split('\n');
   const scopeLines: string[] = [];
+  const varLines: string[] = [];
   const constBlocks: string[][] = [];
   const normalLines: string[] = [];
 
   function normalizeDirectiveLine(line: string) {
     const tokens = line.split(/\s+/).filter(Boolean);
     return tokens.join(' ');
+  }
+
+  // ช่วย parse ชื่อ var จากบรรทัด @var
+  function parseVarLine(line: string): string | null {
+    // ตัวอย่าง: "@var color[initial]" => match "color"
+    // ใช้ regex หาชื่อก่อน [
+    const m = /@var\s+([\w-]+)\s*\[/.exec(line);
+    if (m) {
+      return m[1];
+    }
+    return null;
   }
 
   {
@@ -439,6 +451,17 @@ function generateGeneric(sourceCode: string): string {
       }
       if (trimmed.startsWith('@scope ')) {
         scopeLines.push(normalizeDirectiveLine(trimmed));
+        i++;
+        continue;
+      }
+      if (trimmed.startsWith('@var ')) {
+        // เก็บทั้งบรรทัด raw ไว้ใน varLines
+        varLines.push(normalizeDirectiveLine(trimmed));
+        // parse ชื่อ var => เก็บลง varSet
+        const varName = parseVarLine(trimmed);
+        if (varName) {
+          varSet.add(varName);
+        }
         i++;
         continue;
       }
@@ -479,7 +502,17 @@ function generateGeneric(sourceCode: string): string {
     return `${clsName}: [${arrLiteral}]`;
   });
 
+  // 8.1) สร้างส่วน var: [...]
+  // ถ้ามี varSet ค่อยใส่
+  const varArr = Array.from(varSet);
+  const varEntry = varArr.length
+    ? `var: [${varArr.map((v) => `'${v}'`).join(', ')}]`
+    : '';
+
   const allEntries = [...classEntries];
+  if (varEntry) {
+    allEntries.push(varEntry);
+  }
   const finalGeneric = `{ ${allEntries.join('; ')} }`;
 
   // ---------------------------------------------------------------------------
@@ -493,7 +526,7 @@ function generateGeneric(sourceCode: string): string {
   }
 
   // ---------------------------------------------------------------------------
-  // 10) ฟอร์แมต (@const block + .box block + directive) ตาม logic เดิม
+  // 10) ฟอร์แมต (@var lines, @const block + .box block + directive) ตาม logic เดิม
   // ---------------------------------------------------------------------------
   const formattedConstBlocks: string[][] = [];
   for (const block of constBlocks) {
@@ -529,14 +562,27 @@ function generateGeneric(sourceCode: string): string {
   }
 
   const finalLines: string[] = [];
+
+  // ใส่ scope lines
   for (const s of scopeLines) {
     finalLines.push(`${indentUnit}${s}`);
   }
   if (scopeLines.length > 0) {
     finalLines.push('');
   }
+
+  // ใส่ var lines
+  if (varLines.length > 0) {
+    for (const vLine of varLines) {
+      finalLines.push(`${indentUnit}${vLine}`);
+    }
+    finalLines.push('');
+  }
+
+  // ใส่ const blocks
   formattedConstBlocks.forEach((block, idx) => {
-    if (idx > 0) {
+    if (idx > 0 || varLines.length === 0) {
+      // ถ้าไม่มี varLines เลย ก็ใส่บรรทัดว่างคั่น block แรกด้วย
       finalLines.push('');
     }
     finalLines.push(...block);
@@ -544,6 +590,8 @@ function generateGeneric(sourceCode: string): string {
   if (formattedConstBlocks.length > 0) {
     finalLines.push('');
   }
+
+  // ใส่ normal lines
   finalLines.push(...formattedBlockLines);
 
   // (Pass ที่ 2.1) ได้ finalBlock หลัง format
