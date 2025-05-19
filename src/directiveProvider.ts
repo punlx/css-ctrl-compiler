@@ -47,11 +47,6 @@ export function createDirectiveProvider() {
           ];
         }
 
-        // อยู่ในบล็อก @query (หรือ '>' ที่นับเป็น query) => แนะนำ scope
-        if (stack.includes('query')) {
-          return [makeItem('scope', 'CSS-CTRL directive @scope (in query)')];
-        }
-
         // (CHANGED) Top-level => แนะนำ scope, const, keyframe (ลบ bind)
         return [
           makeItem('scope', 'CSS-CTRL Scope directive'),
