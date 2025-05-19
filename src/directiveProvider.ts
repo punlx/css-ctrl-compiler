@@ -1,5 +1,4 @@
 // src/directiveProvider.ts
-
 import * as vscode from 'vscode';
 
 export function createDirectiveProvider() {
@@ -23,10 +22,18 @@ export function createDirectiveProvider() {
           return;
         }
 
-        // 2) เคสพิเศษ: ถ้า "ก่อนหน้า @" ในบรรทัดเดียวกัน มี '@query' หรือ '>'
-        //    และยังไม่เปิด '{' => เสนอเฉพาะ "scope"
+        // 2) เคสพิเศษ: ถ้า "ก่อนหน้า @" ในบรรทัดเดียวกัน มี '@query' หรือ '>' และยังไม่เปิด '{'
+        //    => เสนอเฉพาะ "scope"
         if (isAfterQuerySymbolButNoBrace(document, position)) {
           return [makeItem('scope', 'CSS-CTRL directive @scope (after @query or >)')];
+        }
+
+        // 2.5) ถ้าอยู่ภายใน [ ... @ ] => Suggest "var" ที่ประกาศในไฟล์ (CompletionItemKind.Value)
+        if (isInsideBracket(textBeforeCursor)) {
+          const varNames = findAllVars(document);
+          if (varNames.length > 0) {
+            return varNames.map((v) => makeItem(v, `CSS-CTRL var "${v}"`, true));
+          }
         }
 
         // 3) ใช้ blockStack logic เดิม
@@ -37,35 +44,35 @@ export function createDirectiveProvider() {
           return undefined;
         }
 
-        // อยู่ในบล็อก .class => แนะนำ use, (CHANGED) bind
-        // (CHANGED) คอมเมนต์ query ออกอยู่แล้ว
+        // อยู่ในบล็อก .class => แนะนำ use, bind (CompletionItemKind.Event)
         if (stack.includes('class')) {
           return [
             makeItem('use', 'CSS-CTRL directive @use (in class)'),
             makeItem('bind', 'CSS-CTRL Bind directive (in class)'),
-            // makeItem('query', 'CSS-CTRL directive @query (in class)'),
           ];
         }
 
-        // (CHANGED) Top-level => แนะนำ scope, const, keyframe (ลบ bind)
+        // Top-level => แนะนำ scope, const, keyframe, var (CompletionItemKind.Event)
         return [
           makeItem('scope', 'CSS-CTRL Scope directive'),
-          // (CHANGED) ลบ bind ออก
           makeItem('const', 'CSS-CTRL Abbe Constant directive'),
           makeItem('keyframe', 'CSS-CTRL Keyframe directive'),
+          makeItem('var', 'CSS-CTRL Var directive'),
         ];
       },
     },
-    // Trigger character เฉพาะ '@'
     '@'
   );
 }
 
 /**
  * สร้าง CompletionItem
+ * - ถ้า isVar === true => CompletionItemKind.Value
+ * - ถ้าไม่ใช่ => CompletionItemKind.Event
  */
-function makeItem(name: string, detail: string): vscode.CompletionItem {
-  const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Event);
+function makeItem(name: string, detail: string, isVar?: boolean): vscode.CompletionItem {
+  const kind = isVar ? vscode.CompletionItemKind.Variable : vscode.CompletionItemKind.Event;
+  const item = new vscode.CompletionItem(name, kind);
   item.insertText = name;
   item.detail = detail;
   return item;
@@ -81,73 +88,71 @@ function isAfterQuerySymbolButNoBrace(
   position: vscode.Position
 ): boolean {
   const lineText = document.lineAt(position.line).text;
-  // substring ก่อน cursor
   const textBeforeCursor = lineText.substring(0, position.character);
-
-  // 1) หา lastIndexOf('@query') หรือ '>' ในบรรทัดนี้
   const idxQuery = textBeforeCursor.lastIndexOf('@query');
   const idxArrow = textBeforeCursor.lastIndexOf('>');
-
-  // ถ้าไม่มีสักอัน => ไม่เข้าเคส
   if (idxQuery < 0 && idxArrow < 0) {
     return false;
   }
-
-  // เอาตำแหน่งที่มากกว่า (latest)
   const idxSymbol = Math.max(idxQuery, idxArrow);
-
-  // 2) ตรวจว่าหลังจาก symbol จนถึงจุด cursor มี '{' ไหม
   const substringFromSymbol = textBeforeCursor.slice(idxSymbol);
   if (substringFromSymbol.includes('{')) {
-    // ถ้าเปิดบล็อกแล้ว => ไม่ใช่เคสพิเศษ
     return false;
   }
-
-  // ถ้ามาถึงนี่ => แปลว่าเจอ '@query' หรือ '>' ในบรรทัดนี้
-  // และยังไม่เจอ '{' => ถือเป็นเคสพิเศษ
   return true;
 }
 
 /**
+ * ตรวจว่าอยู่ภายใน [ ... ] หรือไม่ (เช็คง่ายๆ แค่ก่อนหน้า '@' มี '[' แต่ยังไม่มี ']' ปิด)
+ */
+function isInsideBracket(textBeforeCursor: string): boolean {
+  const lastOpenBracket = textBeforeCursor.lastIndexOf('[');
+  const lastCloseBracket = textBeforeCursor.lastIndexOf(']');
+  return lastOpenBracket !== -1 && lastOpenBracket > lastCloseBracket;
+}
+
+/**
+ * หา list ของ var ที่ประกาศในไฟล์ (เช่น @var primary[red])
+ */
+function findAllVars(document: vscode.TextDocument): string[] {
+  const text = document.getText();
+  const reVar = /@var\s+([a-zA-Z_]\w*)\s*\[/g;
+  const varNames: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = reVar.exec(text)) !== null) {
+    varNames.push(match[1]);
+  }
+  return varNames;
+}
+
+/**
  * findBlockStack => parse open/close block
- *  - ลูปอ่าน textUpToCursor ทั้งหมด แล้วใช้ regex หาโทเค็นเปิด/ปิดบล็อก
- *  - stack.push(...) เมื่อเจอเปิดบล็อก, stack.pop() เมื่อเจอปิดบล็อก
- *  - ถ้าเจอ @query หรือ '>' + '{' => ถือเป็น 'query'
  */
 function findBlockStack(document: vscode.TextDocument, position: vscode.Position): string[] {
   const textUpToCursor = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
-
-  const tokens: { index: number; type: 'class' | 'const' | 'query' | 'close' | 'keyframe' }[] = [];
-
-  // .class {
+  const tokens: {
+    index: number;
+    type: 'class' | 'const' | 'query' | 'close' | 'keyframe' | 'var';
+  }[] = [];
   scanRegex(/\.\w+\s*\{/g, 'class');
-  // @const ... {
   scanRegex(/@const\b[^\{]*\{/g, 'const');
-  // @query ... { หรือ > ... {
   scanRegex(/@query\b[^\{]*\{|>\s*[^\{]*\{/g, 'query');
-  // @keyframe ... {
   scanRegex(/@keyframe\b[^\{]*\{/g, 'keyframe');
-  // }
+  scanRegex(/@var\b[^\{]*\{/g, 'var');
   scanRegex(/\}/g, 'close');
-
   tokens.sort((a, b) => a.index - b.index);
-
   const stack: string[] = [];
   for (const tk of tokens) {
     if (tk.type === 'close') {
-      // เจอ '}'
       if (stack.length > 0) {
         stack.pop();
       }
     } else {
-      // เจอเปิดบล็อก => push
       stack.push(tk.type);
     }
   }
-
   return stack;
-
-  function scanRegex(re: RegExp, type: 'class' | 'const' | 'query' | 'close' | 'keyframe') {
+  function scanRegex(re: RegExp, type: 'class' | 'const' | 'query' | 'close' | 'keyframe' | 'var') {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(textUpToCursor)) !== null) {
