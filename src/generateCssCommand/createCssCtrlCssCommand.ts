@@ -13,6 +13,7 @@ import { IStyleDefinition } from './types';
 import { buildKeyframeNameMap, buildKeyframesCSS } from './parsers/paseKeyFrameBody';
 import { parseThemeClassFull } from '../parseTheme';
 import { formatCss } from '../formatters/formatCss';
+import { convertCSSVariable } from './helpers/convertCSSVariable'; // ใช้แปลงค่าที่มี "--xxx" ให้เป็น "var(--xxx)" ถ้าจำเป็น
 
 /**
  * globalDefineMap – ถ้าต้องการฟีเจอร์ @const / theme.property ข้ามไฟล์
@@ -22,7 +23,9 @@ export const globalDefineMap: Record<string, Record<string, IStyleDefinition>> =
 
 /************************************************************
  * ฟังก์ชันหลัก: generateCssCtrlCssFromSource
- * (CHANGED) เปลี่ยนเป็น async เพื่อเรียกใช้ getThemeClassSet() แบบ async
+ *  - รองรับ @var top-level (เช่น @var color[red]) และแทน SCOPEVAR(...) => var(--color-scopeName)
+ *  - รองรับ @bind เช่นกัน (ผ่าน checkBindLines)
+ *  - เรียกแบบ async เพื่อใช้ getThemeClassSet()
  ************************************************************/
 export async function generateCssCtrlCssFromSource(sourceText: string): Promise<string> {
   // (A) parse directives
@@ -30,8 +33,8 @@ export async function generateCssCtrlCssFromSource(sourceText: string): Promise<
     directives,
     classBlocks,
     constBlocks,
-    // --- ADDED FOR KEYFRAME ---
     keyframeBlocks,
+    varDefs, // (NEW) เก็บ @var top-level
   } = parseDirectives(sourceText);
 
   // (B) หาค่า scope จาก @scope
@@ -40,16 +43,23 @@ export async function generateCssCtrlCssFromSource(sourceText: string): Promise<
 
   ensureScopeUnique(scopeName);
 
+  // (NEW) เช็คถ้า scope=none แต่มี varDefs => throw error
+  if (scopeName === 'none' && varDefs.length > 0) {
+    throw new Error(
+      `[CSS-CTRL-ERR] Cannot use @var when scope=none. Found ${varDefs.length} top-level var(s).`
+    );
+  }
+
   // (C) สร้าง constMap จาก @const
   const constMap = new Map<string, IStyleDefinition>();
   for (const c of constBlocks) {
     constMap.set(c.name, c.styleDef);
   }
 
-  // --- NEW STEP for Keyframe NameMap ---
+  // (D) สร้าง keyframeNameMap (สำหรับ rename keyframe => scope_keyframeName)
   const keyframeNameMap = buildKeyframeNameMap(keyframeBlocks, scopeName);
 
-  // (D) parse .className blocks => Map<classDisplayKey, styleDef> + shortNameToFinal
+  // (E) parse .className blocks => ได้ classNameDefs + shortNameToFinal
   const { classMap: classNameDefs, shortNameToFinal } = processClassBlocks(
     scopeName,
     classBlocks,
@@ -57,20 +67,38 @@ export async function generateCssCtrlCssFromSource(sourceText: string): Promise<
     keyframeNameMap
   );
 
-  // (E) เดิมเราจะ call handleBindDirectives(...) ที่ top-level
-  //     (REMOVED) เราไม่ทำแล้ว เพราะ @bind ย้ายไปอยู่ใน .class
-
-  // (CHANGED) เรียกแบบ async เพื่อได้ชุด class จาก theme เหมือน provider Suggest
+  // (F) โหลดชุด class จาก theme (ถ้ามี) เพื่อเช็ค @bind
   const themeClassSet = await getThemeClassSet();
-
-  // (CHANGED) เรียกฟังก์ชันตรวจสอบ @bind ภายในแต่ละ class
+  // (G) เรียกฟังก์ชันตรวจสอบ @bind
   checkBindLines(scopeName, classNameDefs, themeClassSet);
 
-  // (F) สร้าง CSS ของ keyframe blocks
-  const keyframeCss = buildKeyframesCSS(keyframeBlocks, keyframeNameMap, scopeName);
+  // (H) สร้าง keyframe CSS (+ ยังไม่ต่อกับ class)
+  //     (UPDATED) ไม่มี varDefs ใน buildKeyframesCSS เดิม => ถ้าต้องใช้ varDefs ให้แก้ใน paseKeyFrameBody.ts ด้วย
+  //     ในกรณีนี้ assume buildKeyframesCSS ปัจจุบันอาจรองรับ varDefs แล้ว
+  const keyframeCss = buildKeyframesCSS(keyframeBlocks, keyframeNameMap, scopeName, varDefs);
 
-  // (G) สร้าง CSS ของ class ต่าง ๆ
-  let finalCss = keyframeCss; // วาง keyframe ก่อน
+  // (I) สร้าง block ของ @var top-level => :root{ ... }
+  const scopeVarsMap: Record<string, string> = {};
+  for (const vdef of varDefs) {
+    const finalName = `--${vdef.varName}-${scopeName}`;
+    scopeVarsMap[finalName] = convertCSSVariable(vdef.rawValue);
+  }
+  let rootBlock = '';
+  for (const finalName in scopeVarsMap) {
+    rootBlock += `${finalName}:${scopeVarsMap[finalName]};`;
+  }
+  const varDefCss = rootBlock ? `:root{${rootBlock}}` : '';
+
+  // (J) แปลง SCOPEVAR(...) => var(--xxx-scopeName) ใน class styleDef (recursive)
+  for (const [displayKey, styleDef] of classNameDefs.entries()) {
+    transformScopeVarsRecursive(styleDef, scopeName, varDefs);
+  }
+
+  // (K) ประกอบ CSS
+  // - เอา :root{...} ของ varDefs ก่อน
+  // - ต่อด้วย keyframeCss
+  // - แล้วตามด้วย class-based css
+  let finalCss = varDefCss + keyframeCss;
   for (const [displayKey, styleDef] of classNameDefs.entries()) {
     finalCss += buildCssText(displayKey, styleDef, shortNameToFinal, scopeName);
   }
@@ -124,7 +152,7 @@ export async function createCssCtrlCssFile(doc: vscode.TextDocument) {
   edit.replace(doc.uri, fullRange, finalText);
   await vscode.workspace.applyEdit(edit);
 
-  // (2) generate CSS (CHANGED ให้เป็น await)
+  // (2) generate CSS (async)
   let generatedCss: string;
   try {
     generatedCss = await generateCssCtrlCssFromSource(finalText.replace(importLine, ''));
@@ -139,8 +167,13 @@ export async function createCssCtrlCssFile(doc: vscode.TextDocument) {
   fs.writeFileSync(newCssFilePath, formattedCss, 'utf8');
 }
 
+/************************************************************
+ * ฟังก์ชันช่วยอื่น ๆ
+ ************************************************************/
+
 /**
  * (CHANGED) เปลี่ยนเป็น async เพื่อใช้ workspace.findFiles
+ *  - แค่ load ไฟล์ ctrl.theme.ts ถ้ามี เพื่อนำ className ไปตรวจ @bind
  */
 async function getThemeClassSet(): Promise<Set<string>> {
   const files = await vscode.workspace.findFiles('**/ctrl.theme.ts', '**/node_modules/**', 1);
@@ -157,7 +190,8 @@ async function getThemeClassSet(): Promise<Set<string>> {
 
 /**
  * (CHANGED) checkBindLines: เดิมเคย throw error ถ้า class ไม่อยู่ใน .ctrl.ts หรือ theme.class(...)
- * ตอนนี้แก้ไขให้ **ไม่สนใจ** แล้ว อยาก bind อะไรก็ได้ ไม่เช็คว่าอยู่ที่ไหน
+ *  ตอนนี้แก้เป็น “ใครจะ bind อะไร bind ไป” แต่ยังเช็คว่า .className ขึ้นต้นด้วยจุด 
+ *  ถ้าไม่ใส่จุด => throw
  */
 function checkBindLines(
   scopeName: string,
@@ -177,14 +211,107 @@ function checkBindLines(
       }
       const refs = raw.split(/\s+/);
       for (const ref of refs) {
-        // ยังเช็คว่าเริ่มด้วย '.' (e.g. ".box1")
         if (!ref.startsWith('.')) {
           throw new Error(
             `[CSS-CTRL-ERR] @bind usage must reference classes with a dot. got "${ref}"`
           );
         }
-        // ---- (เปลี่ยน) ยกเลิกการเช็คว่าอยู่ใน .ctrl.ts หรือ theme.class
-        // ---- ดังนั้น ไม่ throw error แม้จะไม่พบ
+        // ยกเลิกการเช็คว่ามีอยู่จริงใน themeClassSet หรือไม่
+      }
+    }
+  }
+}
+
+/**
+ * transformScopeVarsRecursive:
+ *   แทนที่ SCOPEVAR(xxx) => var(--xxx-scopeName) ใน styleDef ปกติ (ไม่ใช่ keyframe)
+ *   แล้ว recurse ลง nestedQueries
+ */
+function transformScopeVarsRecursive(
+  styleDef: IStyleDefinition,
+  scopeName: string,
+  varDefs: Array<{ varName: string; rawValue: string }>
+) {
+  const declaredVars = new Set(varDefs.map((v) => v.varName));
+  const re = /SCOPEVAR\(([\w-]+)\)/g;
+
+  function doReplace(str: string): string {
+    return str.replace(re, (_, name) => {
+      if (!declaredVars.has(name)) {
+        throw new Error(`[CSS-CTRL-ERR] Using @${name} but not declared with @var ${name}[...].`);
+      }
+      return `var(--${name}-${scopeName})`;
+    });
+  }
+
+  // base
+  for (const prop in styleDef.base) {
+    styleDef.base[prop] = doReplace(styleDef.base[prop]);
+  }
+
+  // states
+  for (const stName in styleDef.states) {
+    const stObj = styleDef.states[stName];
+    for (const p in stObj) {
+      stObj[p] = doReplace(stObj[p]);
+    }
+  }
+
+  // pseudos
+  if (styleDef.pseudos) {
+    for (const pseudoKey in styleDef.pseudos) {
+      const pObj = styleDef.pseudos[pseudoKey];
+      if (!pObj) continue;
+      for (const prop in pObj) {
+        pObj[prop] = doReplace(pObj[prop]);
+      }
+    }
+  }
+
+  // screens
+  for (const sc of styleDef.screens) {
+    for (const prop in sc.props) {
+      sc.props[prop] = doReplace(sc.props[prop]);
+    }
+  }
+
+  // containers
+  for (const ctnr of styleDef.containers) {
+    for (const prop in ctnr.props) {
+      ctnr.props[prop] = doReplace(ctnr.props[prop]);
+    }
+  }
+
+  // pluginStates
+  if ((styleDef as any).pluginStates) {
+    const pluginStates = (styleDef as any).pluginStates;
+    for (const stKey in pluginStates) {
+      const stObj = pluginStates[stKey];
+      if (!stObj || !stObj.props) continue;
+      for (const propKey in stObj.props) {
+        stObj.props[propKey] = doReplace(stObj.props[propKey]);
+      }
+    }
+  }
+
+  // pluginContainers
+  if ((styleDef as any).pluginContainers) {
+    const pcArr = (styleDef as any).pluginContainers;
+    for (const pcObj of pcArr) {
+      for (const prop in pcObj.props) {
+        pcObj.props[prop] = doReplace(pcObj.props[prop]);
+      }
+    }
+  }
+
+  // nestedQueries => recurse
+  if (styleDef.nestedQueries && styleDef.nestedQueries.length > 0) {
+    for (const nq of styleDef.nestedQueries) {
+      transformScopeVarsRecursive(nq.styleDef, scopeName, varDefs);
+      if (nq.children && nq.children.length > 0) {
+        for (const c of nq.children) {
+          transformScopeVarsRecursive(c.styleDef, scopeName, varDefs);
+        }
       }
     }
   }

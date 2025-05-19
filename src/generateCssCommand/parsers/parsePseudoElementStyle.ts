@@ -32,8 +32,15 @@ export function parsePseudoElementStyle(
         `[CSS-CTRL-ERR] !important is not allowed in @const block. Found: "${abbrLine}"`
       );
     }
-    const [abbr, val] = separateStyleAndProperties(tokenNoBang);
+
+    // ----------------------------------------
+    // แยก abbr / val
+    // ----------------------------------------
+    const [abbr, rawVal] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
+
+    // (NEW) replace @xxxx => SCOPEVAR(xxxx)
+    let val = rawVal.replace(/@([\w-]+)/g, (_, vName) => `SCOPEVAR(${vName})`);
 
     if (abbr === 'ct') {
       // content
@@ -41,6 +48,7 @@ export function parsePseudoElementStyle(
       continue;
     }
 
+    // expansions
     const expansions = [`${abbr}[${val}]`];
     for (const ex of expansions) {
       const [abbr2, val2] = separateStyleAndProperties(ex);
@@ -55,12 +63,10 @@ export function parsePseudoElementStyle(
 
       // (NEW) plain local var => "--xxx"
       if (abbr2.startsWith('--') && !abbr2.startsWith('--&')) {
-        // e.g. --color[red]
         const rawName = abbr2.slice(2);
         if (!rawName) {
           throw new Error(`[CSS-CTRL-ERR] Missing local var name after "--". Found: "${ex}"`);
         }
-        // เก็บ plainLocalVars
         if (!(styleDef as any).plainLocalVars) {
           (styleDef as any).plainLocalVars = {};
         }
@@ -94,7 +100,7 @@ export function parsePseudoElementStyle(
           const cProp = abbrMap[subAbbr as keyof typeof abbrMap];
           if (!cProp) {
             throw new Error(
-              `[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap (pseudo:${pseudoName}). (ty[${typKey}])`
+              `[CSS-CTRL-ERR] "${subAbbr}" not found in abbrMap or theme.property(...) for pseudo-element ${pseudoName}.`
             );
           }
           const finalVal = convertCSSVariable(subVal);
@@ -109,25 +115,17 @@ export function parsePseudoElementStyle(
         continue;
       }
 
-      // ---------------------------------------------------------
-      // ก่อนแก้ไข โค้ดเดิมมีแค่:
-      //   const def = abbrMap[realAbbr as keyof typeof abbrMap];
-      //   if (!def) { throw error }
-      //   ...
-      // แก้เพิ่ม fallback ไปหา theme.property
-      // ---------------------------------------------------------
       const def = abbrMap[realAbbr as keyof typeof abbrMap];
       if (!def) {
-        // ADDED for theme.property fallback
+        // fallback: check theme.property
         if (realAbbr in globalDefineMap) {
           const subKey = val2.trim();
           if (!globalDefineMap[realAbbr][subKey]) {
             throw new Error(
-              `[CSS-CTRL-ERR] "${realAbbr}[${subKey}]" not found in theme.property(...) for pseudo ${pseudoName}.`
+              `[CSS-CTRL-ERR] "${realAbbr}[${subKey}]" not found in theme.property(...) for pseudo-element ${pseudoName}.`
             );
           }
           const partialDef = globalDefineMap[realAbbr][subKey];
-          // เอาเฉพาะ partialDef.base => ใส่ใน pseudo
           for (const propKey in partialDef.base) {
             result[propKey] = partialDef.base[propKey] + (isImportant ? ' !important' : '');
           }
@@ -139,9 +137,6 @@ export function parsePseudoElementStyle(
         }
       }
 
-      // ---------------------------------------------------------
-      // เคสปกติ: เจอใน abbrMap
-      // ---------------------------------------------------------
       const finalVal = convertCSSVariable(val2);
 
       if (isVariable) {
@@ -153,7 +148,8 @@ export function parsePseudoElementStyle(
               `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
           }
         } else {
-          result[def] = `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
+          result[def] =
+            `var(--${realAbbr}-${pseudoName})` + (isImportant ? ' !important' : '');
         }
       } else if (val2.includes('--&')) {
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {

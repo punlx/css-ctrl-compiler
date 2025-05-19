@@ -64,14 +64,20 @@ export function parseContainerStyle(
       );
     }
 
-    const [abbr, val] = separateStyleAndProperties(tokenNoBang);
+    // ----------------------------------------
+    // แยก abbr / val
+    // ----------------------------------------
+    const [abbr, rawVal] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
+
+    // (NEW) replace @xxxx => SCOPEVAR(xxxx)
+    let val = rawVal.replace(/@([\w-]+)/g, (_, vName) => `SCOPEVAR(${vName})`);
 
     const isVar = abbr.startsWith('$');
 
     if (isQueryBlock && isVar) {
       throw new Error(
-        `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${abbrLine}"`
+        `[CSS-CTRL-ERR] $variable not allowed inside @query for container. Found: "${abbrLine}"`
       );
     }
     if (isVar) {
@@ -141,7 +147,8 @@ export function parseContainerStyle(
           }
           const partialDef = globalDefineMap[abbr2][subKey];
           for (const propName in partialDef.base) {
-            containerProps[propName] = partialDef.base[propName] + (isImportant ? ' !important' : '');
+            containerProps[propName] =
+              partialDef.base[propName] + (isImportant ? ' !important' : '');
           }
           continue;
         } else {

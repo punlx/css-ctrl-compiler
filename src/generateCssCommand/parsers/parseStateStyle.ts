@@ -31,15 +31,23 @@ export function parseStateStyle(
       );
     }
 
-    const [abbr, val] = separateStyleAndProperties(tokenNoBang);
+    // ----------------------------------------
+    // แยก abbr / val
+    // ----------------------------------------
+    const [abbr, rawVal] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
 
+    // (NEW) replace @xxxx => SCOPEVAR(xxxx)
+    let val = rawVal.replace(/@([\w-]+)/g, (_, vName) => `SCOPEVAR(${vName})`);
+
+    // ----------------------------------------
+    // expansions
+    // ----------------------------------------
     const expansions = [`${abbr}[${val}]`];
     for (const ex of expansions) {
       const [abbr2, val2] = separateStyleAndProperties(ex);
       if (!abbr2) continue;
 
-      // ถ้า isQueryBlock && abbr2.startsWith('$') => throw
       if (isQueryBlock && abbr2.startsWith('$')) {
         throw new Error(
           `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${ex}"`
@@ -104,10 +112,6 @@ export function parseStateStyle(
         continue;
       }
 
-      // -------------------------------------------------------------------
-      // เดิมจะ if (!def) throw ...
-      // แทรก logic check theme.property
-      // -------------------------------------------------------------------
       const def = abbrMap[realAbbr as keyof typeof abbrMap];
       if (!def) {
         // fallback: check globalDefineMap
@@ -119,7 +123,6 @@ export function parseStateStyle(
             );
           }
           const partialDef = globalDefineMap[realAbbr][subKey];
-          // นำ partialDef.base => ใส่ใน result
           for (const propKey in partialDef.base) {
             result[propKey] = partialDef.base[propKey] + (isImportant ? ' !important' : '');
           }
@@ -131,7 +134,6 @@ export function parseStateStyle(
         }
       }
 
-      // เคสปกติ: abbrMap
       let finalVal = convertCSSVariable(val2);
 
       if (isVar) {
@@ -145,7 +147,8 @@ export function parseStateStyle(
               `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
           }
         } else {
-          result[def] = `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
+          result[def] =
+            `var(--${realAbbr}-${funcName})` + (isImportant ? ' !important' : '');
         }
       } else if (val2.includes('--&')) {
         const replaced = val2.replace(/--&([\w-]+)/g, (_, varName) => {

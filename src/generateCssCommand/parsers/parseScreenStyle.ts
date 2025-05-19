@@ -64,11 +64,17 @@ export function parseScreenStyle(
       );
     }
 
-    const [abbr, val] = separateStyleAndProperties(tokenNoBang);
+    // ----------------------------------------
+    // แยก abbr / val
+    // ----------------------------------------
+    const [abbr, rawVal] = separateStyleAndProperties(tokenNoBang);
     if (!abbr) continue;
+
+    // (NEW) replace @xxxx => SCOPEVAR(xxxx)
+    let val = rawVal.replace(/@([\w-]+)/g, (_, vName) => `SCOPEVAR(${vName})`);
+
     const isVar = abbr.startsWith('$');
 
-    // ถ้า isQueryBlock && isVar => throw
     if (isQueryBlock && isVar) {
       throw new Error(
         `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${abbrLine}"`
@@ -131,7 +137,7 @@ export function parseScreenStyle(
 
       const def = abbrMap[abbr2 as keyof typeof abbrMap];
       if (!def) {
-        // ADDED for theme.property fallback
+        // fallback: check globalDefineMap
         if (abbr2 in globalDefineMap) {
           const subKey = val2.trim();
           if (!globalDefineMap[abbr2][subKey]) {
@@ -141,7 +147,8 @@ export function parseScreenStyle(
           }
           const partialDef = globalDefineMap[abbr2][subKey];
           for (const propName in partialDef.base) {
-            screenProps[propName] = partialDef.base[propName] + (isImportant ? ' !important' : '');
+            screenProps[propName] =
+              partialDef.base[propName] + (isImportant ? ' !important' : '');
           }
           continue;
         } else {

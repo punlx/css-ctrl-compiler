@@ -3,7 +3,7 @@
 import { parseSingleAbbr } from '../parsers/parseSingleAbbr';
 import { IClassBlock, IStyleDefinition } from '../types';
 import { mergeStyleDef } from '../utils/mergeStyleDef';
-import { createEmptyStyleDef } from '../helpers/createEmptyStyleDef';
+import { createEmptyStyleDef } from './createEmptyStyleDef';
 
 import { parseNestedQueryBlocks } from '../utils/parseNestedQueryBlocks';
 import { transformVariables } from '../transformers/transformVariables';
@@ -95,6 +95,13 @@ export function processClassBlocks(
 
   for (const block of classBlocks) {
     const clsName = block.className;
+
+    // (NEW) เช็คห้ามใช้ชื่อ "var"
+    if (clsName === 'var') {
+      throw new Error(
+        `[CSS-CTRL-ERR] Class name ".var" is not allowed (reserved word for @var directive).`
+      );
+    }
 
     if (localClasses.has(clsName)) {
       throw new Error(

@@ -13,7 +13,9 @@ import { parseSingleAbbr } from './parseSingleAbbr';
 /**
  * parseBaseStyle
  *
- * (CHANGED FOR KEYFRAME) เพิ่ม parameter keyframeNameMap สำหรับ rename keyframe name
+ * - รองรับการ parse "bg[@color]" => "bg[SCOPEVAR(color)]" => สุดท้าย => "var(--color-scope)"
+ * - เพิ่ม logic ตรวจจับกรณี `--&xxx[@varName]` => throw error
+ * - (MODIFIED) เพิ่ม logic บล็อก `$var[@xxx]` => throw error
  */
 export function parseBaseStyle(
   abbrLine: string,
@@ -30,10 +32,18 @@ export function parseBaseStyle(
     );
   }
 
-  const [styleAbbr, propValue] = separateStyleAndProperties(abbrLineNoBang);
+  // แยกเป็น [styleAbbr, propValueOrig]
+  const [styleAbbr, propValueOrig] = separateStyleAndProperties(abbrLineNoBang);
   if (!styleAbbr) {
     return;
   }
+
+  // (NEW) เปลี่ยน `@xxx` => `SCOPEVAR(xxx)`
+  let propValue = propValueOrig;
+  const scopeVarRegex = /@([\w-]+)/g;
+  propValue = propValue.replace(scopeVarRegex, (_, varName) => {
+    return `SCOPEVAR(${varName})`;
+  });
 
   // ถ้า abbrMap กับ globalDefineMap มีชื่อชนกัน => throw
   if (styleAbbr in abbrMap && styleAbbr in globalDefineMap) {
@@ -42,18 +52,24 @@ export function parseBaseStyle(
     );
   }
 
-  // -----------------------------------------------------------------------
-  // (A) ประกาศ local var  --&xxx
-  // -----------------------------------------------------------------------
+  // (A) ประกาศ local var  --&xxx => throw ถ้า SCOPEVAR
   if (styleAbbr.startsWith('--&')) {
-    // ประกาศ local var
+    // ถ้าเจอ SCOPEVAR(...) หรือ @... => throw error
+    if (propValue.includes('SCOPEVAR(')) {
+      throw new Error(
+        `[CSS-CTRL-ERR] local var (${styleAbbr}) cannot reference scope var (@...). Found: "${propValueOrig}"`
+      );
+    }
+
     if (isQueryBlock) {
       throw new Error(
         `[CSS-CTRL-ERR] local var "${styleAbbr}" not allowed to declare in @query block. (line: ${abbrLine})`
       );
     }
     if (isImportant) {
-      throw new Error(`[CSS-CTRL-ERR] !important is not allowed with local var "${styleAbbr}".`);
+      throw new Error(
+        `[CSS-CTRL-ERR] !important is not allowed with local var "${styleAbbr}".`
+      );
     }
 
     const localVarName = styleAbbr.slice(3);
@@ -81,16 +97,19 @@ export function parseBaseStyle(
     return;
   }
 
-  // -----------------------------------------------------------------------
-  // (A2) (NEW) ประกาศ "plain local var" => --xxx
-  // -----------------------------------------------------------------------
+  // (A2) plain local var => --xxx
   if (styleAbbr.startsWith('--')) {
-    // e.g. --color[red]
     if (!styleAbbr.startsWith('--&')) {
-      // สมมุติอนุญาตในทุกบริบท (รวม @query, @const) ตามโค้ดเก่า
+      // e.g. --color[red]
       const rawName = styleAbbr.slice(2);
       if (!rawName) {
         throw new Error(`[CSS-CTRL-ERR] Missing local var name after "--". Found: "${abbrLine}"`);
+      }
+
+      if (propValue.includes('SCOPEVAR(')) {
+        throw new Error(
+          `[CSS-CTRL-ERR] plain local var ("--${rawName}") cannot reference scope var (@...). Found: "${propValueOrig}"`
+        );
       }
 
       if (!(styleDef as any).plainLocalVars) {
@@ -101,11 +120,17 @@ export function parseBaseStyle(
     }
   }
 
-  // -----------------------------------------------------------------------
   // (B) ถ้าเป็น runtime var => $xxx
-  // -----------------------------------------------------------------------
   const isVariable = styleAbbr.startsWith('$');
   if (isVariable) {
+    // (NEW) เช็คว่ามี '@' (หรือ "SCOPEVAR(") อยู่ใน propValue หรือไม่ => ถ้าพบ => throw error
+    //     เช่น $bg[@xxx] => error
+    if (propValue.includes('SCOPEVAR(')) {
+      throw new Error(
+        `[CSS-CTRL-ERR] $variable cannot reference scope var (@...). Found: "${abbrLine}"`
+      );
+    }
+
     if (isQueryBlock) {
       throw new Error(
         `[CSS-CTRL-ERR] Runtime variable ($var) not allowed inside @query block. Found: "${abbrLine}"`
@@ -157,9 +182,7 @@ export function parseBaseStyle(
     return;
   }
 
-  // -----------------------------------------------------------------------
   // (C) ถ้าเป็น "ty" => ใช้ typography
-  // -----------------------------------------------------------------------
   if (styleAbbr === 'ty') {
     const typKey = propValue.trim();
     if (!globalTypographyDict[typKey]) {
@@ -174,32 +197,22 @@ export function parseBaseStyle(
     return;
   }
 
-  // -----------------------------------------------------------------------
-  // (CHANGED FOR KEYFRAME)
-  // (D*) เช็คเคส abbr = "am" / "am-n" => ถ้า propValue เริ่มต้นด้วย keyframeName => rename
-  // -----------------------------------------------------------------------
+  // (D*) เช็คเคส am / am-n => keyframe rename
   if (styleAbbr === 'am' || styleAbbr === 'am-n') {
-    // ตัวอย่าง: am[move 1s ease]
-    // ให้ split ด้วยช่องว่าง แล้วดูคำแรก
     const tokens = propValue.trim().split(/\s+/);
     if (tokens.length > 0 && keyframeNameMap) {
       const firstToken = tokens[0];
-      // ถ้ามีใน keyframeNameMap => rename
       if (keyframeNameMap.has(firstToken)) {
         tokens[0] = keyframeNameMap.get(firstToken)!;
       }
     }
-    // สร้าง value กลับ
     const finalVal = tokens.join(' ') + (isImportant ? ' !important' : '');
-    // property = animation / animation-name
     const cssProp = styleAbbr === 'am' ? 'animation' : 'animation-name';
     styleDef.base[cssProp] = finalVal;
     return;
   }
 
-  // -----------------------------------------------------------------------
-  // (D) ถ้าไม่เจอใน abbrMap => อาจเป็น property?
-  // -----------------------------------------------------------------------
+  // (D) ไม่เจอใน abbrMap => อาจเป็น property?
   if (!(styleAbbr in abbrMap)) {
     if (styleAbbr in globalDefineMap) {
       const tokens = propValue.split(/\s+/).filter(Boolean);
@@ -214,7 +227,9 @@ export function parseBaseStyle(
       }
       const partialDef = globalDefineMap[styleAbbr][subK];
       if (!partialDef) {
-        throw new Error(`[CSS-CTRL-ERR] "${styleAbbr}[${subK}]" not found in theme.property(...).`);
+        throw new Error(
+          `[CSS-CTRL-ERR] "${styleAbbr}[${subK}]" not found in theme.property(...).`
+        );
       }
       mergeStyleDef(styleDef, partialDef);
       return;
@@ -224,9 +239,7 @@ export function parseBaseStyle(
     );
   }
 
-  // -----------------------------------------------------------------------
   // (E) ถ้าอยู่ใน abbrMap => parse expansions
-  // -----------------------------------------------------------------------
   const expansions = [`${styleAbbr}[${propValue}]`];
   for (const ex of expansions) {
     const [abbr2, val2] = separateStyleAndProperties(ex);

@@ -26,13 +26,14 @@ export function buildKeyframeNameMap(keyframeBlocks: IKeyframeBlock[], scopeName
 }
 
 /**
- * (2) buildKeyframesCSS จาก keyframeBlocks + keyframeNameMap
- *    ใช้ parseKeyframeBody เพื่อ parse เนื้อในแต่ละ keyframe
+ * (2) buildKeyframesCSS
+ *    เพิ่มพารามิเตอร์ varDefs เพื่อจะได้ transform SCOPEVAR(...) => var(--...-scopeName)
  */
 export function buildKeyframesCSS(
   keyframeBlocks: IKeyframeBlock[],
   keyframeNameMap: Map<string, string>,
-  scopeName: string
+  scopeName: string,
+  varDefs: Array<{ varName: string; rawValue: string }> // (NEW) เพิ่มเข้ามา
 ): string {
   if (!keyframeBlocks || keyframeBlocks.length === 0) {
     return '';
@@ -40,7 +41,10 @@ export function buildKeyframesCSS(
   let out = '';
   for (const kb of keyframeBlocks) {
     const finalKfName = keyframeNameMap.get(kb.name)!;
-    const steps = parseKeyframeBody(kb.rawBlock, finalKfName, scopeName);
+
+    // (UPDATED) ส่ง varDefs ไป parseKeyframeBody ด้วย
+    const steps = parseKeyframeBody(kb.rawBlock, finalKfName, scopeName, varDefs);
+
     // ประกาศ rootVar ถ้ามี
     let rootVarBlock = '';
     for (const rv in steps.rootVars) {
@@ -49,6 +53,7 @@ export function buildKeyframesCSS(
     if (rootVarBlock) {
       out += `:root{${rootVarBlock}}`;
     }
+
     // สร้างเนื้อ @keyframes
     let kfBody = '';
     for (const step of steps.stepList) {
@@ -64,15 +69,15 @@ export function buildKeyframesCSS(
 }
 
 /**
- * (3) parseKeyframeBody:
- *    เดิมใช้ Regex จับทีละบรรทัด => ไม่รองรับ multiline
- *    (UPDATED) เปลี่ยนมา merge ไลน์ด้วย parenCount เพื่อรองรับ from(\n bg[red]\n)
- *    (ADDED) เช็คว่าห้ามมี certain states/pseudos/screen/container + @use/@bind/@query/ '>' ในเนื้อ
+ * (3) parseKeyframeBody
+ *    - รับ varDefs เพื่อเราจะทำการ transform SCOPEVAR(...) => var(--xxx-scopeName) ภายใน keyframe
+ *    - ยังคงไม่อนุญาตบางอย่าง เช่น @use, @bind, @query, > และไม่อนุญาต state/pseudo/screen/container
  */
 export function parseKeyframeBody(
   rawBlock: string,
   finalKfName: string,
-  scopeName: string
+  scopeName: string,
+  varDefs: Array<{ varName: string; rawValue: string }>
 ): {
   stepList: Array<{
     label: string;
@@ -85,24 +90,21 @@ export function parseKeyframeBody(
     .map((l) => l.trim())
     .filter(Boolean);
 
-  // (NEW) mergeLineForKeyframe => รวมข้อความจนกว่าจะพบปิดวงเล็บ
+  // รวมบรรทัดด้วย parenCount
   const mergedLines = mergeLineForKeyframe(lines);
 
   const stepList: Array<{ label: string; styleDef: IStyleDefinition }> = [];
   const rootVars: Record<string, string> = {};
 
-  // (NEW) สร้างชุดคำที่ห้ามใช้ใน keyframe step
+  // ไลส์ต์สิ่งที่ไม่อนุญาต
   const forbiddenList = [
     ...knownStates,   // hover, focus, active, ...
     ...supportedPseudos, // before, after, ...
     'screen',
-    'container'
+    'container',
   ];
 
   for (const merged of mergedLines) {
-    // ตัวอย่าง merged => "from(bg[red] c[white])"
-    // หรือ "50%(bg[green])"
-    // เราแยกหา label + body
     const match = merged.match(/^([0-9]{1,3}%|from|to)\s*\(([\s\S]+)\)$/);
     if (!match) {
       throw new Error(`[CSS-CTRL-ERR] Invalid keyframe syntax: "${merged}"`);
@@ -110,9 +112,11 @@ export function parseKeyframeBody(
     const label = match[1];
     const abbrPart = match[2].trim();
 
-    // (ADDED) เช็คไม่ให้มี @use, @bind, @query, หรือ '>' ภายใน keyframe
+    // ห้ามใช้ @use, @bind, @query, หรือ '>'
     if (
-      abbrPart.includes('@') ||
+      abbrPart.includes('@use') ||
+      abbrPart.includes('@bind') ||
+      abbrPart.includes('@query') ||
       abbrPart.includes('>')
     ) {
       throw new Error(
@@ -120,7 +124,7 @@ export function parseKeyframeBody(
       );
     }
 
-    // (ADDED) เช็คไม่ให้มี states/pseudos/screen/container + '('
+    // ห้ามใช้ states/pseudos/screen/container + '('
     for (const forbidden of forbiddenList) {
       const needle = `${forbidden}(`;
       if (abbrPart.includes(needle)) {
@@ -133,14 +137,14 @@ export function parseKeyframeBody(
     // สร้าง styleDef สำหรับ step นี้
     const stepDef = createEmptyStyleDef();
 
-    // เช็ค local var (--&) อีกที
+    // ห้าม local var --&xxx
     if (abbrPart.includes('--&')) {
       throw new Error(
         `[CSS-CTRL-ERR] local var (--&xxx) not allowed in @keyframe. Found in step "${label}".`
       );
     }
 
-    // แยก token DSL แล้ว parse ลง stepDef
+    // parse DSL
     const tokens = abbrPart.split(/ (?=[^\[\]]*(?:\[|$))/);
     for (const tk of tokens) {
       parseSingleAbbr(tk, stepDef, false, false, false, undefined);
@@ -157,7 +161,6 @@ export function parseKeyframeBody(
             : `--${varName}-${scopeName}_${finalKfName}-${cleanLabel}`;
         rootVars[finalVarName] = rawVal;
 
-        // replace ใน base
         for (const p in stepDef.base) {
           const pat = `var(--${varName})`;
           stepDef.base[p] = stepDef.base[p].replace(pat, `var(${finalVarName})`);
@@ -166,6 +169,9 @@ export function parseKeyframeBody(
       delete stepDef.varBase;
     }
 
+    // (NEW) ตรงนี้ทำการแทนที่ SCOPEVAR(...) => var(--xxx-scopeName)
+    doTransformScopeVarsInKeyframe(stepDef, scopeName, varDefs);
+
     stepList.push({ label, styleDef: stepDef });
   }
 
@@ -173,21 +179,45 @@ export function parseKeyframeBody(
 }
 
 /**
- * (NEW) mergeLineForKeyframe
- *    รวมหลายบรรทัดจนกว่าจะเจอเครื่องหมายปิดวงเล็บครบ
- *    ใช้ parenCount++ เมื่อเจอ '(' และ parenCount-- เมื่อเจอ ')'
- *    เพื่อรองรับ from(\n bg[red]\n c[white]\n) => บรรทัดเดียว
+ * (NEW) doTransformScopeVarsInKeyframe
+ *    แทนที่ SCOPEVAR(xxx) => var(--xxx-scopeName) เหมือนกับใน class
+ *    โดยเช็คว่ามีการประกาศ @var ไหม (varDefs)
+ */
+function doTransformScopeVarsInKeyframe(
+  styleDef: IStyleDefinition,
+  scopeName: string,
+  varDefs: Array<{ varName: string; rawValue: string }>
+) {
+  const declaredVars = new Set(varDefs.map((v) => v.varName));
+  const re = /SCOPEVAR\(([\w-]+)\)/g;
+
+  function doReplace(str: string): string {
+    return str.replace(re, (_, name) => {
+      if (!declaredVars.has(name)) {
+        throw new Error(
+          `[CSS-CTRL-ERR] Using @${name} but not declared with @var ${name}[...]. (in keyframe)`
+        );
+      }
+      return `var(--${name}-${scopeName})`;
+    });
+  }
+
+  // base
+  for (const prop in styleDef.base) {
+    styleDef.base[prop] = doReplace(styleDef.base[prop]);
+  }
+}
+
+/**
+ * รวมหลายบรรทัดจนกว่าจะเจอเครื่องหมายปิดวงเล็บครบ
  */
 function mergeLineForKeyframe(lines: string[]): string[] {
   const result: string[] = [];
   let buffer = '';
   let parenCount = 0;
-  let inCssFunc = false; // ถ้าเจอ rgb(, hsl(, url(, etc. ต้องไม่นับเพิ่ม/ลด parenCount
+  let inCssFunc = false;
 
-  // ฟังก์ชันช่วยเช็คว่าเป็นฟังก์ชัน CSS หรือไม่
   function isCssFuncAhead(str: string): boolean {
-    // ตัวอย่าง pattern: /^(rgba?|hsla?|url|var|calc|clamp|...)
-    // เอาแบบง่าย ๆ ข้างล่าง
     const testStr = str.toLowerCase();
     return /(rgba?|hsla?|url|var|calc|hsl|rgb|clamp|linear-gradient|repeat)\($/.test(testStr);
   }
@@ -203,7 +233,6 @@ function mergeLineForKeyframe(lines: string[]): string[] {
       buffer += ' ' + ln;
     }
 
-    // สแกนตัวอักษรใน ln
     for (let j = 0; j < ln.length; j++) {
       const ch = ln[j];
       if (ch === '(') {
