@@ -28,6 +28,10 @@
             {
               "name": "support.constant.property-value.css",
               "match": "\\b(?!\\d+(?:\\.\\d+)?(?:%|px|s|cm|mm|in|pt|pc|em|rem|vw|vh|vmin|vmax|ex|ch|lh|rlh|fr)\\b)[\\w-]+\\b"
+            },
+            {
+              "name": "support.type.property-name.css",
+              "match": "@(?!scope\\b|const\\b|use\\b|bind\\b|var\\b|keyframe\\b|query\\b)[\\w-]+"
             }
           ]
         },
